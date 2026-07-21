@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Physical Servers Support | {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="admin-shell">
+  <header class="admin-header">
+    <div>
+      <h1>Physical Servers Support</h1>
+      <p>Edit vendor support end dates for physical servers. Everything else is synced live from Zabbix.</p>
+    </div>
+  </header>
+
+  {% if saved %}
+    <div class="alert alert-success py-2" role="alert">Support dates saved.</div>
+  {% endif %}
+
+  <form method="post" action="/admin/support">
+    <section class="admin-panel">
+      <div class="admin-panel-head">
+        <h2>Physical Servers Support</h2>
+        <span>{{ hosts|length }} physical servers</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle table-hover overview-table">
+          <thead>
+            <tr>
+              <th>Server</th>
+              <th>Model</th>
+              <th>Vendor</th>
+              <th>Datacenter</th>
+              <th>Support end</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for host in hosts %}
+              <tr>
+                <td>
+                  <input type="hidden" name="host_ids" value="{{ host.id }}">
+                  <a class="table-link" href="/hosts/{{ host.id }}">{{ host.hostname|upper }}</a>
+                </td>
+                <td>{{ host.model or "-" }}</td>
+                <td>{{ host.vendor or "-" }}</td>
+                <td>{{ host.datacenter }}</td>
+                <td>
+                  <input class="form-control form-control-sm admin-date-input" type="date" name="support_end_date_{{ host.id }}" value="{{ host.support_end_date or '' }}">
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="5" class="empty-state">No physical servers found.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    <div class="admin-save-bar">
+      <button class="btn btn-primary" type="submit">
+        <i class="bi bi-save"></i> Save
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}

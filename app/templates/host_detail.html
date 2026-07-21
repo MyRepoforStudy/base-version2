@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}{{ host.hostname }} | {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>{{ host.hostname }}</h1>
+    <p class="text-muted mb-0">{{ host.ip_address or host.fqdn or "-" }}</p>
+  </div>
+  <a class="btn btn-outline-secondary btn-sm" href="/?view=hosts"><i class="bi bi-arrow-left"></i> Servers</a>
+</div>
+
+<div class="metric-grid mb-3">
+  <div class="content-panel">
+    <div class="panel-title"><h2>Monitoring</h2></div>
+    <div class="stack-list">
+      <div class="stack-row"><span>Status</span><span class="badge text-bg-{{ host.monitoring_status|status_class }}">{{ host.monitoring_status }}</span></div>
+      <div class="stack-row"><span>Agent</span><span>{{ host.zabbix_agent_availability }}</span></div>
+      <div class="stack-row"><span>Open problems</span><span>{{ host.problem_count }}</span></div>
+      <div class="stack-row"><span>Last sync</span><span>{{ host.zabbix_last_sync_at|date_time }}</span></div>
+    </div>
+  </div>
+  <div class="content-panel">
+    <div class="panel-title"><h2>Hardware</h2></div>
+    <div class="stack-list">
+      <div class="stack-row"><span>Vendor / Model</span><span>{{ host.vendor or "-" }} {{ host.model or "" }}</span></div>
+      <div class="stack-row"><span>Type</span><span>{{ "Virtual" if host.virtual else "Physical" }}</span></div>
+      <div class="stack-row"><span>CPU cores</span><span>{{ host.cpu_cores or "-" }}</span></div>
+      <div class="stack-row"><span>RAM</span><span>{{ (host.ram_gb ~ " GB") if host.ram_gb else "-" }}</span></div>
+      <div class="stack-row"><span>Uptime</span><span>{{ uptime_label }}</span></div>
+    </div>
+  </div>
+  <div class="content-panel">
+    <div class="panel-title"><h2>Inventory</h2></div>
+    <div class="stack-list">
+      <div class="stack-row"><span>Environment</span><span>{{ host.environment }}</span></div>
+      <div class="stack-row"><span>Datacenter</span><span>{{ host.datacenter }}</span></div>
+      <div class="stack-row"><span>OS</span><span>{{ host.os_name or "-" }}</span></div>
+      <div class="stack-row"><span>Support end</span><span>{{ host.support_end_date or "-" }}</span></div>
+    </div>
+  </div>
+</div>
+
+{% if host.zabbix_url %}
+  <a class="btn btn-outline-primary btn-sm" href="{{ host.zabbix_url }}" target="_blank" rel="noreferrer">
+    <i class="bi bi-box-arrow-up-right"></i> Open in Zabbix
+  </a>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="overview-shell">
+  <aside class="overview-sidebar">
+    <div class="overview-logo">
+      <span><i class="bi bi-hdd-network-fill"></i></span>
+    </div>
+
+    <div class="overview-nav">
+      <div class="sidebar-caption">Page Navigator</div>
+      <a class="overview-nav-item {% if current_view == 'overview' %}active{% endif %}" href="/?view=overview">Overview</a>
+      <a class="overview-nav-item {% if current_view == 'hosts' %}active{% endif %}" href="/?view=hosts">Servers</a>
+    </div>
+
+    <form class="overview-filters" action="/" method="get">
+      <input type="hidden" name="view" value="{{ current_view }}">
+      <div class="sidebar-caption">Filters</div>
+      <label>
+        Environment
+        <select class="form-select form-select-sm" name="environment">
+          <option value="">All</option>
+          {% for value in filter_options.environments %}
+            <option value="{{ value }}" {% if filters.environment == value %}selected{% endif %}>{{ value }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        Virtual
+        <select class="form-select form-select-sm" name="virtual">
+          <option value="">All</option>
+          <option value="YES" {% if active_virtual_filter == "YES" %}selected{% endif %}>Virtual</option>
+          <option value="NO" {% if active_virtual_filter == "NO" %}selected{% endif %}>Physical</option>
+        </select>
+      </label>
+      <div class="overview-filter-actions">
+        <button class="btn btn-primary btn-sm" type="submit">Apply</button>
+        <a class="btn btn-outline-secondary btn-sm" href="/?view={{ current_view }}">Reset</a>
+      </div>
+    </form>
+  </aside>
+
+  <section class="overview-main">
+    <header class="overview-header">
+      <div class="overview-heading">
+        <div>
+          <h1>{% if current_view == 'overview' %}SUMMARY OVERVIEW{% else %}SERVERS OVERVIEW{% endif %}</h1>
+          <p class="section-subtitle-strong">SERVERS {{ total }}</p>
+        </div>
+      </div>
+      <div class="overview-actions">
+        <form action="/" method="get" class="d-inline">
+          <input type="hidden" name="view" value="{{ current_view }}">
+          <input type="hidden" name="environment" value="{{ filters.environment or '' }}">
+          <input type="hidden" name="virtual" value="{{ active_virtual_filter or '' }}">
+          <input type="hidden" name="refresh" value="1">
+          <button class="btn btn-outline-secondary btn-sm" type="submit">
+            <i class="bi bi-arrow-repeat"></i> Refresh Zabbix
+          </button>
+        </form>
+        <a class="btn btn-success btn-sm" href="/exports/hosts.xlsx"><i class="bi bi-file-earmark-excel"></i> Export Servers</a>
+      </div>
+    </header>
+
+    {% if last_sync_at %}
+      <div class="text-muted small mb-2">Last Zabbix sync: {{ last_sync_at|date_time }}</div>
+    {% endif %}
+
+    {% if zabbix_refresh_error %}
+      <div class="alert alert-warning py-2 mb-3" role="alert">
+        Live Zabbix refresh failed. Showing cached data. {{ zabbix_refresh_error }}
+      </div>
+    {% endif %}
+
+    {% if zabbix_inventory_warning %}
+      <div class="alert alert-info py-2 mb-3" role="alert">{{ zabbix_inventory_warning }}</div>
+    {% endif %}
+
+    {% if current_view == "overview" %}
+      <div class="executive-grid executive-summary-grid">
+        <section class="overview-panel executive-panel executive-chart-panel">
+          <div class="overview-section-heading">
+            <h2>Server Estate</h2>
+            <span>Virtual / Physical</span>
+          </div>
+          <div class="executive-chart-body">
+            <div class="executive-chart-wrap">
+              <canvas id="serverEstateChart"></canvas>
+              <div class="executive-chart-center">
+                <strong>{{ total }}</strong>
+                <span>Servers</span>
+              </div>
+            </div>
+            <div class="executive-chart-legend">
+              <div><span><i class="bi bi-cloud executive-legend-icon"></i>Virtual</span><strong>{{ virtual_count }}</strong></div>
+              <div><span><i class="bi bi-server executive-legend-icon"></i>Physical</span><strong>{{ physical_count }}</strong></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="overview-panel executive-panel executive-chart-panel executive-os-panel">
+          <div class="overview-section-heading">
+            <h2>Operating Systems</h2>
+            <span>Ubuntu / OEL / RHEL / ...</span>
+          </div>
+          <div class="executive-health-chart">
+            <canvas id="osChart"></canvas>
+          </div>
+        </section>
+
+        <section class="overview-panel executive-panel executive-chart-panel">
+          <div class="overview-section-heading">
+            <h2>Environment</h2>
+            <span>by server count</span>
+          </div>
+          <div class="executive-chart-legend">
+            {% for label, count in environment_counts %}
+              <div><span>{{ label }}</span><strong>{{ count }}</strong></div>
+            {% endfor %}
+          </div>
+        </section>
+
+        <section class="overview-panel executive-panel summary-support-panel">
+          <div class="overview-section-heading">
+            <h2>Physical Servers Support (EOSL)</h2>
+            {% if request.session.get("admin_user") %}
+              <a class="btn btn-outline-secondary btn-sm" href="/admin/support"><i class="bi bi-pencil-square"></i> Admin</a>
+            {% else %}
+              <span>{{ physical_server_rows|length }} physical servers</span>
+            {% endif %}
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle overview-table">
+              <thead>
+                <tr>
+                  <th>Server</th>
+                  <th>Model</th>
+                  <th>Vendor</th>
+                  <th>Datacenter</th>
+                  <th>Support End</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in physical_server_rows %}
+                  {% set host = row.host %}
+                  <tr>
+                    <td><a class="table-link" href="/hosts/{{ host.id }}">{{ host.hostname|upper }}</a></td>
+                    <td>{{ row.model }}</td>
+                    <td>{{ row.vendor }}</td>
+                    <td>{{ row.datacenter }}</td>
+                    <td>{{ host.support_end_date or "-" }}</td>
+                    <td>
+                      <span class="support-status-badge support-status-{{ row.support_status|lower|replace(' ', '-') }}">
+                        {{ row.support_status }}
+                      </span>
+                    </td>
+                  </tr>
+                {% else %}
+                  <tr><td colspan="6" class="empty-state">No physical servers found.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <div class="summary-side-stack">
+          <section class="overview-panel executive-panel">
+            <div class="overview-section-heading">
+              <h2>Datacenter Footprint</h2>
+              <span>MAIN / DR sites</span>
+            </div>
+            <div class="datacenter-map datacenter-map-compact">
+              <div class="datacenter-node datacenter-node-main">
+                <div class="datacenter-node-head">
+                  <span class="datacenter-icon"><i class="bi bi-building"></i></span>
+                  <span>MAIN Datacenter</span>
+                </div>
+                <strong>{{ datacenter_counts.MAIN }}</strong>
+                <small>Primary site</small>
+              </div>
+              <div class="datacenter-link" aria-hidden="true"><span></span></div>
+              <div class="datacenter-node datacenter-node-dr">
+                <div class="datacenter-node-head">
+                  <span class="datacenter-icon"><i class="bi bi-hdd-rack"></i></span>
+                  <span>DR Datacenter</span>
+                </div>
+                <strong>{{ datacenter_counts.DR }}</strong>
+                <small>Recovery site</small>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    {% else %}
+      <section class="overview-panel">
+        <div class="overview-section-heading">
+          <h2>Server Summary</h2>
+          <span>{{ hosts|length }} records</span>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle table-hover overview-table">
+            <thead>
+              <tr>
+                <th>Server</th>
+                <th>IP</th>
+                <th>Environment</th>
+                <th>Virtual</th>
+                <th>Vendor</th>
+                <th>Model</th>
+                <th>CPU</th>
+                <th>RAM</th>
+                <th>Operating system</th>
+                <th>Monitoring</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for host in hosts %}
+                <tr>
+                  <td><a class="table-link" href="/hosts/{{ host.id }}">{{ host.zabbix_host_name or host.hostname }}</a></td>
+                  <td>{{ host.ip_address or "-" }}</td>
+                  <td><span class="pill env-pill env-{{ (host.environment or 'unknown')|lower }}">{{ host.environment }}</span></td>
+                  <td>{{ "YES" if host.virtual else "NO" }}</td>
+                  <td>{{ host.vendor or "-" }}</td>
+                  <td>{{ host.model or "-" }}</td>
+                  <td>{{ host.cpu_cores or "-" }}</td>
+                  <td>{{ (host.ram_gb ~ " GB") if host.ram_gb else "-" }}</td>
+                  <td>{{ host.os_name or "-" }}</td>
+                  <td><span class="badge text-bg-{{ host.monitoring_status|status_class }}">{{ host.monitoring_status }}</span></td>
+                </tr>
+              {% else %}
+                <tr><td colspan="10" class="empty-state">No servers found.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+  const chartData = {{ chart_data|tojson }};
+  const brandPalette = ["#e30613", "#111827", "#9ca3af", "#64748b", "#f59e0b", "#2563eb", "#7c3aed"];
+
+  function makeDoughnut(id, labels, values) {
+    const el = document.getElementById(id);
+    if (!el || typeof Chart === "undefined") return;
+    new Chart(el, {
+      type: "doughnut",
+      data: { labels, datasets: [{ data: values, backgroundColor: brandPalette, borderColor: "#fff", borderWidth: 3 }] },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: "68%",
+        plugins: { legend: { display: false } },
+      },
+    });
+  }
+
+  function makeBar(id, labels, values) {
+    const el = document.getElementById(id);
+    if (!el || typeof Chart === "undefined") return;
+    new Chart(el, {
+      type: "bar",
+      data: { labels, datasets: [{ data: values, backgroundColor: brandPalette, borderColor: brandPalette, borderWidth: 1 }] },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { x: { beginAtZero: true, ticks: { precision: 0 } } },
+      },
+    });
+  }
+
+  makeDoughnut("serverEstateChart", chartData.platformLabels, chartData.platformValues);
+  makeBar("osChart", chartData.osLabels, chartData.osValues);
+</script>
+{% endblock %}

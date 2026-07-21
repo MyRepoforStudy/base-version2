@@ -1,36 +1,68 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Linux Server Inventory
 
-## Getting Started
+Portal for Linux server inventory: live data synced from Zabbix (OS, CPU, RAM, uptime, vendor/model, monitoring status), plus vendor support end dates maintained by an admin.
 
-First, run the development server:
+## Стек
+
+- Backend: Python FastAPI
+- Frontend: Jinja2 + Bootstrap
+- Database: PostgreSQL
+- ORM: SQLAlchemy
+- Migrations: Alembic
+- Export: Excel через openpyxl
+- Deployment: Docker Compose
+
+## Быстрый запуск через Docker Compose
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env
+# заполните ZABBIX_URL / ZABBIX_API_TOKEN в .env
+docker compose up -d --build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Приложение будет доступно на `http://localhost:8000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Интеграция с Zabbix
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Данные тянутся из группы хостов Zabbix `Linux servers` (настраивается через `ZABBIX_HOST_GROUP`):
 
-## Learn More
+- **Живые данные из Zabbix**: hostname, IP, OS, CPU cores, RAM, uptime, vendor/model (через DMI item'ы `/sys/class/dmi/id/*`), статус мониторинга, количество проблем
+- **Из тегов хоста в Zabbix** (`environment`, `datacenter`) — если тег не задан, поле показывается как `UNKNOWN`/`Unknown`
+- **Только вручную через Admin**: support end date для физических серверов — этого нет в Zabbix
 
-To learn more about Next.js, take a look at the following resources:
+Синхронизация запускается автоматически (раз в `ZABBIX_AUTO_REFRESH_SECONDS`, по умолчанию 300 сек) при заходе на дашборд, либо вручную:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+docker compose exec app ./sync_zabbix
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Если Zabbix использует самоподписанный сертификат:
 
-## Deploy on Vercel
+```bash
+ZABBIX_VERIFY_SSL=false
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+или, правильнее, смонтируйте внутренний CA-сертификат и укажите путь в `ZABBIX_CA_FILE`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Локальный запуск без Docker
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+copy .env.example .env
+alembic upgrade head
+uvicorn app.main:app --reload
+```
+
+## Основные страницы
+
+- `/?view=overview` — Overview
+- `/?view=hosts` — список серверов с фильтрами
+- `/hosts/{id}` — детали сервера
+- `/admin/support` — редактирование support end date (нужен логин)
+- `/exports/hosts.xlsx` — экспорт в Excel
+
+## Модель данных
+
+`hosts`: сервер + живые поля Zabbix (`zabbix_hostid`, `zabbix_host_name`, `zabbix_url`, `zabbix_agent_availability`, `monitoring_status`, `problem_count`, `zabbix_last_sync_at`, `os_name`, `cpu_cores`, `ram_gb`, `uptime_seconds`, `vendor`, `model`, `virtual`) + единственное ручное поле `support_end_date`.

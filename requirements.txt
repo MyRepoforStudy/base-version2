@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+jinja2
+sqlalchemy
+alembic
+psycopg[binary]
+openpyxl
+python-dotenv
+itsdangerous

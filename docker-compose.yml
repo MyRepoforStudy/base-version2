@@ -1,53 +1,46 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
+  db:
+    image: postgres:16
+    container_name: server_inventory_db
     environment:
-      POSTGRES_USER: serverinv
-      POSTGRES_PASSWORD: serverinv
       POSTGRES_DB: server_inventory
+      POSTGRES_USER: server_inventory
+      POSTGRES_PASSWORD: server_inventory
     volumes:
       - server_inventory_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U serverinv -d server_inventory"]
+      test: ["CMD-SHELL", "pg_isready -U server_inventory -d server_inventory"]
       interval: 5s
       timeout: 5s
       retries: 10
 
-  migrate:
+  app:
     build:
       context: .
-      dockerfile: Dockerfile
-      target: builder
       args:
         HTTP_PROXY: "${HTTP_PROXY:-}"
         HTTPS_PROXY: "${HTTPS_PROXY:-}"
         NO_PROXY: "${NO_PROXY:-}"
-    depends_on:
-      postgres:
-        condition: service_healthy
+    container_name: server_inventory_app
     environment:
-      DATABASE_URL: "postgresql://serverinv:serverinv@postgres:5432/server_inventory?schema=public"
-    command: ["npx", "prisma", "migrate", "deploy"]
-
-  web:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        HTTP_PROXY: "${HTTP_PROXY:-}"
-        HTTPS_PROXY: "${HTTPS_PROXY:-}"
-        NO_PROXY: "${NO_PROXY:-}"
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-    environment:
-      DATABASE_URL: "postgresql://serverinv:serverinv@postgres:5432/server_inventory?schema=public"
-      ZABBIX_API_URL: "${ZABBIX_API_URL}"
-      ZABBIX_API_TOKEN: "${ZABBIX_API_TOKEN}"
+      DATABASE_URL: postgresql+psycopg://server_inventory:server_inventory@db:5432/server_inventory
+      APP_NAME: Linux Server Inventory
+      APP_ENV: docker
+      APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Almaty}
+      SESSION_SECRET: ${SESSION_SECRET:-change-me-admin-session-secret}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      ZABBIX_URL: ${ZABBIX_URL:-}
+      ZABBIX_API_TOKEN: ${ZABBIX_API_TOKEN:-}
+      ZABBIX_VERIFY_SSL: ${ZABBIX_VERIFY_SSL:-true}
+      ZABBIX_CA_FILE: ${ZABBIX_CA_FILE:-}
+      ZABBIX_HOST_GROUP: ${ZABBIX_HOST_GROUP:-Linux servers}
+      ZABBIX_AUTO_REFRESH_SECONDS: ${ZABBIX_AUTO_REFRESH_SECONDS:-300}
     ports:
-      - "3000:3000"
-    restart: unless-stopped
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
 
 volumes:
   server_inventory_pgdata:

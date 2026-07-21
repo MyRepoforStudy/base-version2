@@ -1,0 +1,198 @@
+from __future__ import annotations
+
+from datetime import UTC, datetime
+
+from sqlalchemy import select
+
+from app.core.config import get_settings
+from app.db.session import SessionLocal
+from app.models import Host
+from app.services.zabbix import ZabbixClient
+from app.services.zabbix_items import (
+    ZABBIX_DETAIL_ITEM_KEYS,
+    cpu_cores_from_items,
+    is_virtual_platform,
+    operating_system_item_label,
+    ram_gb_from_items,
+    server_model_item_label,
+    server_vendor_item_label,
+    uptime_seconds_from_items,
+)
+
+ENVIRONMENT_TAG_NAMES = ("environment", "env")
+DATACENTER_TAG_NAMES = ("datacenter", "data_center", "dc")
+
+
+def normalize_tags(raw_tags: list[dict]) -> dict[str, list[str]]:
+    tags: dict[str, set[str]] = {}
+    for raw_tag in raw_tags or []:
+        tag_name = (raw_tag.get("tag") or "").strip().lower()
+        tag_value = (raw_tag.get("value") or "").strip()
+        if tag_name and tag_value:
+            tags.setdefault(tag_name, set()).add(tag_value)
+    return {tag_name: sorted(values) for tag_name, values in sorted(tags.items())}
+
+
+def first_tag_value(tags: dict[str, list[str]], tag_names: tuple[str, ...]) -> str | None:
+    for tag_name in tag_names:
+        values = tags.get(tag_name)
+        if values:
+            return values[0]
+    return None
+
+
+def environment_from_tags(tags: dict[str, list[str]]) -> str:
+    value = first_tag_value(tags, ENVIRONMENT_TAG_NAMES)
+    if not value:
+        return "UNKNOWN"
+    normalized = value.strip().lower().replace("_", "-")
+    if normalized in {"prod", "production"}:
+        return "PROD"
+    if normalized in {"test", "tst"}:
+        return "TEST"
+    if normalized in {"dev", "development"}:
+        return "DEV"
+    if normalized in {"standby", "dr"}:
+        return "STANDBY"
+    return normalized[:40].upper()
+
+
+def datacenter_from_tags(tags: dict[str, list[str]]) -> str:
+    value = first_tag_value(tags, DATACENTER_TAG_NAMES)
+    if not value:
+        return "Unknown"
+    normalized = value.strip().upper()
+    return normalized if normalized in {"MAIN", "DR"} else value.strip()
+
+
+def normalize_inventory(raw_inventory) -> dict:
+    if isinstance(raw_inventory, dict):
+        return {key: value for key, value in raw_inventory.items() if value}
+    return {}
+
+
+def upsert_host(
+    db,
+    zabbix_host: dict,
+    item_values: dict[str, str],
+    problems: list[dict],
+    client: ZabbixClient,
+) -> tuple[Host, bool]:
+    hostid = str(zabbix_host["hostid"])
+    inventory_hostname = zabbix_host.get("host") or zabbix_host.get("name") or f"zabbix-{hostid}"
+    display_name = zabbix_host.get("name") or inventory_hostname
+    tags = normalize_tags(zabbix_host.get("tags") or [])
+    inventory = normalize_inventory(zabbix_host.get("inventory"))
+
+    os_name = operating_system_item_label(item_values, inventory.get("os_full") or inventory.get("os"))
+    vendor = server_vendor_item_label(item_values, inventory.get("vendor"))
+    model = server_model_item_label(item_values, inventory.get("hardware_full") or inventory.get("hardware"))
+    problem_count = len(problems)
+    availability = client.agent_availability_from_host(zabbix_host)
+    monitoring_status = client.monitoring_status_from_host(zabbix_host, availability, problem_count)
+
+    host = db.scalar(select(Host).where(Host.zabbix_hostid == hostid))
+    created = False
+    if host is None:
+        host = db.scalar(select(Host).where(Host.hostname == inventory_hostname))
+    if host is None:
+        created = True
+        host = Host(hostname=inventory_hostname)
+        db.add(host)
+
+    host.hostname = inventory_hostname
+    host.fqdn = zabbix_host.get("host")
+    host.ip_address = client.primary_interface_address(zabbix_host)
+    host.environment = environment_from_tags(tags)
+    host.datacenter = datacenter_from_tags(tags)
+    host.os_name = os_name
+    host.vendor = vendor
+    host.model = model
+    host.virtual = is_virtual_platform(vendor, model)
+    host.cpu_cores = cpu_cores_from_items(item_values)
+    host.ram_gb = ram_gb_from_items(item_values)
+    host.uptime_seconds = uptime_seconds_from_items(item_values)
+    host.zabbix_hostid = hostid
+    host.zabbix_host_name = display_name
+    host.zabbix_url = client.build_host_url(hostid)
+    host.zabbix_agent_availability = availability
+    host.problem_count = problem_count
+    host.monitoring_status = monitoring_status
+    host.zabbix_last_sync_at = datetime.now(UTC)
+    return host, created
+
+
+def prune_stale_zabbix_hosts(db, seen_hostids: set[str], verbose: bool = True) -> int:
+    imported_hosts = db.scalars(select(Host).where(Host.zabbix_hostid.is_not(None))).all()
+    stale_hosts = [host for host in imported_hosts if str(host.zabbix_hostid) not in seen_hostids]
+    for host in stale_hosts:
+        if verbose:
+            print(f"deleted: {host.hostname} hostid={host.zabbix_hostid} no longer in Zabbix group")
+        db.delete(host)
+    return len(stale_hosts)
+
+
+def refresh_zabbix_inventory(group_name: str | None = None, verbose: bool = True) -> tuple[int, int, int]:
+    settings = get_settings()
+    if not settings.zabbix_url or not settings.zabbix_api_token:
+        raise RuntimeError("ZABBIX_URL and ZABBIX_API_TOKEN must be set")
+
+    requested_group = group_name or settings.zabbix_host_group
+    client = ZabbixClient(
+        settings.zabbix_url,
+        settings.zabbix_api_token,
+        verify_ssl=settings.zabbix_verify_ssl,
+        ca_file=settings.zabbix_ca_file,
+    )
+    groups = client.get_host_groups_by_names([requested_group])
+    if not groups:
+        raise RuntimeError(f"Zabbix group not found: {requested_group}")
+
+    groupids = [str(group["groupid"]) for group in groups]
+    zabbix_hosts = client.get_hosts_by_groupids(groupids)
+    if not zabbix_hosts:
+        if verbose:
+            print(f"No Zabbix hosts found in group: {requested_group}")
+        return 0, 0, 0
+
+    hostids = [str(host["hostid"]) for host in zabbix_hosts]
+    items_by_host = client.get_latest_item_values_bulk(hostids, ZABBIX_DETAIL_ITEM_KEYS)
+    problems_by_host = client.get_current_problems_bulk(hostids)
+
+    db = SessionLocal()
+    created = 0
+    updated = 0
+    deleted = 0
+    seen_hostids: set[str] = set()
+    try:
+        for zabbix_host in zabbix_hosts:
+            hostid = str(zabbix_host["hostid"])
+            if hostid in seen_hostids:
+                continue
+            seen_hostids.add(hostid)
+            host, was_created = upsert_host(
+                db,
+                zabbix_host,
+                items_by_host.get(hostid, {}),
+                problems_by_host.get(hostid, []),
+                client,
+            )
+            if was_created:
+                created += 1
+                action = "created"
+            else:
+                updated += 1
+                action = "updated"
+            if verbose:
+                print(
+                    f"{action}: {host.hostname} hostid={host.zabbix_hostid} "
+                    f"status={host.monitoring_status} problems={host.problem_count}"
+                )
+        deleted = prune_stale_zabbix_hosts(db, seen_hostids, verbose=verbose)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+    return created, updated, deleted
