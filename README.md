@@ -44,6 +44,19 @@ ZABBIX_VERIFY_SSL=false
 
 или, правильнее, смонтируйте внутренний CA-сертификат и укажите путь в `ZABBIX_CA_FILE`.
 
+Если контейнер не может разрешить имя Zabbix (ошибка вида `[Errno -5] No address associated with hostname` или `Temporary failure in name resolution`), хотя с хоста `getent hosts <имя>` резолвит нормально — это частая история с корпоративным DNS внутри Docker-сети. Пропишите статический IP:
+
+```bash
+# в .env
+ZABBIX_HOSTNAME=zabbix.example.local
+ZABBIX_IP=10.0.0.10
+```
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.zabbix-host.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.zabbix-host.yml exec app ./sync_zabbix
+```
+
 ## Локальный запуск без Docker
 
 ```bash
