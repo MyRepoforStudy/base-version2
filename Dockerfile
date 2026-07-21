@@ -14,6 +14,7 @@ ENV HTTP_PROXY=$HTTP_PROXY \
     https_proxy=$HTTPS_PROXY \
     no_proxy=$NO_PROXY
 WORKDIR /app
+RUN apk add --no-cache openssl
 
 # --- deps ---
 FROM base AS deps
