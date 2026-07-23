@@ -71,7 +71,8 @@ uvicorn app.main:app --reload
 ## Основные страницы
 
 - `/?view=overview` — Overview
-- `/?view=hosts` — список серверов с фильтрами
+- `/?view=hosts` — инвентарный список серверов с фильтрами
+- `/?view=performance` — CPU, RAM, filesystem capacity, uptime и Health Score
 - `/hosts/{id}` — детали сервера
 - `/admin/support` — редактирование support end date (нужен логин)
 - `/admin/ownership` — владельцы, сервисы и criticality (нужен логин)

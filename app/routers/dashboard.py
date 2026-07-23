@@ -48,7 +48,14 @@ def dashboard(
     refresh: bool = False,
     db: Session = Depends(get_db),
 ):
-    current_view = view if view in {"overview", "hosts"} else "overview"
+    current_view = view if view in {"overview", "hosts", "performance"} else "overview"
+    if current_view == "hosts" and sort in {
+        "cpu_utilization_pct",
+        "memory_utilization_pct",
+        "disk_max_used_pct",
+        "uptime_seconds",
+    }:
+        current_view = "performance"
     filters = active_filters(
         environment=environment,
         virtual=virtual,

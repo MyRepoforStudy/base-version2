@@ -2326,6 +2326,10 @@ body {
   font-weight: 750;
 }
 
+.performance-table {
+  min-width: 1180px;
+}
+
 @media (max-width: 992px) {
   .metric-grid {
     grid-template-columns: 1fr;

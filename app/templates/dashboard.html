@@ -6,7 +6,7 @@
   {% set new_dir = 'desc' if sort == column and sort_dir == 'asc' else 'asc' %}
   <th>
     <a
-      href="/?view=hosts&environment={{ (filters.environment or '')|urlencode }}&virtual={{ (active_virtual_filter or '')|urlencode }}&os_family={{ (filters.os_family or '')|urlencode }}&proxmox={{ (filters.proxmox or '')|urlencode }}&system={{ (filters.system or '')|urlencode }}&lifecycle={{ (filters.lifecycle or '')|urlencode }}&health={{ (filters.health or '')|urlencode }}&q={{ (filters.q or '')|urlencode }}&sort={{ column }}&dir={{ new_dir }}"
+      href="/?view={{ current_view }}&environment={{ (filters.environment or '')|urlencode }}&virtual={{ (active_virtual_filter or '')|urlencode }}&os_family={{ (filters.os_family or '')|urlencode }}&proxmox={{ (filters.proxmox or '')|urlencode }}&system={{ (filters.system or '')|urlencode }}&lifecycle={{ (filters.lifecycle or '')|urlencode }}&health={{ (filters.health or '')|urlencode }}&q={{ (filters.q or '')|urlencode }}&sort={{ column }}&dir={{ new_dir }}"
       style="color: inherit; text-decoration: none; white-space: nowrap;"
     >
       {{ label }}
@@ -26,9 +26,10 @@
       <div class="sidebar-caption">Page Navigator</div>
       <a class="overview-nav-item {% if current_view == 'overview' %}active{% endif %}" href="/?view=overview">Overview</a>
       <a class="overview-nav-item {% if current_view == 'hosts' %}active{% endif %}" href="/?view=hosts">Servers</a>
+      <a class="overview-nav-item {% if current_view == 'performance' %}active{% endif %}" href="/?view=performance">Performance</a>
     </div>
 
-    {% if current_view == "hosts" %}
+    {% if current_view in ["hosts", "performance"] %}
       <form id="serverFilters" class="overview-filters" action="/" method="get">
         <input type="hidden" name="view" value="{{ current_view }}">
         <input type="hidden" name="sort" value="{{ sort or '' }}">
@@ -109,7 +110,15 @@
     <header class="overview-header">
       <div class="overview-heading">
         <div>
-          <h1>{% if current_view == 'overview' %}SUMMARY OVERVIEW{% else %}SERVERS OVERVIEW{% endif %}</h1>
+          <h1>
+            {% if current_view == 'overview' %}
+              SUMMARY OVERVIEW
+            {% elif current_view == 'performance' %}
+              PERFORMANCE OVERVIEW
+            {% else %}
+              SERVERS OVERVIEW
+            {% endif %}
+          </h1>
           <p class="section-subtitle-strong">SERVERS {{ total }}</p>
         </div>
       </div>
@@ -299,7 +308,7 @@
           </section>
         </div>
       </div>
-    {% else %}
+    {% elif current_view == "hosts" %}
       <section class="overview-panel">
         <div class="overview-section-heading">
           <h2>Server Summary</h2>
@@ -332,10 +341,6 @@
                 {{ sort_th('cpu_cores', 'CPU') }}
                 {{ sort_th('ram_gb', 'RAM total') }}
                 {{ sort_th('health_score', 'Health') }}
-                {{ sort_th('cpu_utilization_pct', 'CPU %') }}
-                {{ sort_th('memory_utilization_pct', 'RAM %') }}
-                {{ sort_th('disk_max_used_pct', 'Disk max') }}
-                {{ sort_th('uptime_seconds', 'Uptime') }}
                 {{ sort_th('os_name', 'Operating system') }}
                 {{ sort_th('os_lifecycle', 'OS lifecycle') }}
                 {{ sort_th('owner', 'Owner') }}
@@ -361,30 +366,6 @@
                     <span class="badge text-bg-{{ health.status|status_class }}">{{ health.score }}/100</span>
                     <small class="d-block text-muted mt-1">{{ health.status|title }}</small>
                   </td>
-                  <td>
-                    {% set cpu_status = utilization_status(host.cpu_utilization_pct) %}
-                    <span class="badge text-bg-{{ cpu_status|status_class }}">
-                      {{ (host.cpu_utilization_pct ~ "%") if host.cpu_utilization_pct is not none else "-" }}
-                    </span>
-                  </td>
-                  <td>
-                    {% set memory_status = utilization_status(host.memory_utilization_pct) %}
-                    <span class="badge text-bg-{{ memory_status|status_class }}">
-                      {{ (host.memory_utilization_pct ~ "%") if host.memory_utilization_pct is not none else "-" }}
-                    </span>
-                  </td>
-                  <td>
-                    {% set disk_status = disk_capacity_status(host.disk_max_used_pct) %}
-                    <span class="badge text-bg-{{ disk_status|status_class }}">
-                      {{ (host.disk_max_used_pct ~ "%") if host.disk_max_used_pct is not none else "-" }}
-                    </span>
-                    <small class="d-block text-muted mt-1">{{ host.disk_max_mount or "-" }}</small>
-                  </td>
-                  {% set last_reboot_at = last_reboot_at_for_host(host) %}
-                  <td>
-                    <strong>{{ format_uptime(host.uptime_seconds) }}</strong>
-                    <small class="d-block text-muted mt-1">Reboot: {{ last_reboot_at|date_time }}</small>
-                  </td>
                   <td>{{ host.os_name or "-" }}</td>
                   {% set lifecycle_status = lifecycle_status_for_host(host) %}
                   <td>
@@ -396,7 +377,77 @@
                   <td><span class="badge text-bg-{{ host.monitoring_status|status_class }}">{{ host.monitoring_status }}</span></td>
                 </tr>
               {% else %}
-                <tr><td colspan="20" class="empty-state">No servers found.</td></tr>
+                <tr><td colspan="16" class="empty-state">No servers found.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    {% else %}
+      <section class="overview-panel">
+        <div class="overview-section-heading">
+          <h2>Performance Health</h2>
+          <div class="d-flex align-items-center gap-2">
+            <input
+              class="form-control form-control-sm"
+              type="search"
+              name="q"
+              form="serverFilters"
+              value="{{ filters.q or '' }}"
+              placeholder="Search hostname, IP, system..."
+              style="min-width: 220px;"
+            >
+            <button class="btn btn-primary btn-sm" type="submit" form="serverFilters"><i class="bi bi-search"></i></button>
+          </div>
+          <span>{{ hosts|length }} records</span>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle table-hover overview-table performance-table">
+            <thead>
+              <tr>
+                {{ sort_th('hostname', 'Server') }}
+                {{ sort_th('ip_address', 'IP') }}
+                {{ sort_th('environment', 'Environment') }}
+                {{ sort_th('health_score', 'Health') }}
+                {{ sort_th('cpu_utilization_pct', 'CPU %') }}
+                {{ sort_th('memory_utilization_pct', 'RAM %') }}
+                <th>Load 1m</th>
+                {{ sort_th('disk_max_used_pct', 'Disk max') }}
+                {{ sort_th('uptime_seconds', 'Uptime') }}
+                <th>Last reboot</th>
+                <th>Metrics updated</th>
+                {{ sort_th('monitoring_status', 'Monitoring') }}
+              </tr>
+            </thead>
+            <tbody>
+              {% for host in hosts %}
+                {% set health = health_for_host(host) %}
+                {% set cpu_status = utilization_status(host.cpu_utilization_pct) %}
+                {% set memory_status = utilization_status(host.memory_utilization_pct) %}
+                {% set disk_status = disk_capacity_status(host.disk_max_used_pct) %}
+                {% set last_reboot_at = last_reboot_at_for_host(host) %}
+                <tr>
+                  <td><a class="table-link" href="/hosts/{{ host.id }}">{{ host.zabbix_host_name or host.hostname }}</a></td>
+                  <td>{{ host.ip_address or "-" }}</td>
+                  <td><span class="pill env-pill env-{{ (host.environment or 'unknown')|lower }}">{{ host.environment }}</span></td>
+                  <td>
+                    <span class="badge text-bg-{{ health.status|status_class }}">{{ health.score }}/100</span>
+                    <small class="d-block text-muted mt-1">{{ health.status|title }}</small>
+                  </td>
+                  <td><span class="badge text-bg-{{ cpu_status|status_class }}">{{ (host.cpu_utilization_pct ~ "%") if host.cpu_utilization_pct is not none else "-" }}</span></td>
+                  <td><span class="badge text-bg-{{ memory_status|status_class }}">{{ (host.memory_utilization_pct ~ "%") if host.memory_utilization_pct is not none else "-" }}</span></td>
+                  <td>{{ host.load_average_1m if host.load_average_1m is not none else "-" }}</td>
+                  <td>
+                    <span class="badge text-bg-{{ disk_status|status_class }}">{{ (host.disk_max_used_pct ~ "%") if host.disk_max_used_pct is not none else "-" }}</span>
+                    <small class="d-block text-muted mt-1">{{ host.disk_max_mount or "-" }}</small>
+                  </td>
+                  <td><strong>{{ format_uptime(host.uptime_seconds) }}</strong></td>
+                  <td>{{ last_reboot_at|date_time }}</td>
+                  <td>{{ host.metrics_collected_at|date_time }}</td>
+                  <td><span class="badge text-bg-{{ host.monitoring_status|status_class }}">{{ host.monitoring_status }}</span></td>
+                </tr>
+              {% else %}
+                <tr><td colspan="12" class="empty-state">No performance data found.</td></tr>
               {% endfor %}
             </tbody>
           </table>
