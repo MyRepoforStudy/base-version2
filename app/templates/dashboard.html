@@ -438,7 +438,7 @@
         <section class="capacity-summary-card">
           <span>Collecting history</span>
           <strong>{{ history_collecting_count }}</strong>
-          <small>History starts after deployment</small>
+          <small>Zabbix trends are imported once</small>
         </section>
       </div>
       <section class="overview-panel">
@@ -521,7 +521,8 @@
           </table>
         </div>
         <p class="capacity-note">
-          Forecast requires at least 6 disk samples spanning 24 hours. SLA becomes final when 95% of the 30-day window is covered.
+          Zabbix trends are imported during the first refresh. Forecast requires at least 6 disk samples spanning 24 hours.
+          SLA becomes final when 95% of the 30-day window is covered.
         </p>
       </section>
     {% endif %}

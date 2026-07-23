@@ -130,6 +130,11 @@ Change History начинает накапливаться после устан
 `METRIC_HISTORY_INTERVAL_SECONDS`, `METRIC_HISTORY_RETENTION_DAYS`,
 `SLA_TARGET_PERCENT` и `CAPACITY_FORECAST_TARGET_PERCENT`.
 
+При первой синхронизации портал загружает до 30 дней почасовых trends из
+Zabbix: `vfs.fs.size[...,pused]` для Capacity Forecast и `agent.ping`
+(с fallback на `icmpping`) для Availability. Глубина начальной загрузки
+настраивается через `ZABBIX_HISTORY_BACKFILL_DAYS`.
+
 Ответственные читаются из Zabbix host tags:
 
 - owner: `owner`, `technical_owner`, `service_owner`;

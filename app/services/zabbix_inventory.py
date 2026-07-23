@@ -7,8 +7,10 @@ from sqlalchemy import select
 from app.core.config import get_settings
 from app.db.session import SessionLocal
 from app.models import Host, HostFilesystem
-from app.services.zabbix import ZabbixClient
+from app.services.zabbix import ZabbixApiError, ZabbixClient
+from app.services.zabbix_history import backfill_zabbix_metric_history
 from app.services.zabbix_items import (
+    ZABBIX_AVAILABILITY_ITEM_KEYS,
     ZABBIX_DETAIL_ITEM_KEYS,
     ZABBIX_FILESYSTEM_ITEM_PREFIXES,
     cpu_cores_from_items,
@@ -263,12 +265,21 @@ def refresh_zabbix_inventory(group_name: str | None = None, verbose: bool = True
 
     hostids = [str(host["hostid"]) for host in zabbix_hosts]
     items_by_host = client.get_latest_item_values_bulk(hostids, ZABBIX_DETAIL_ITEM_KEYS)
-    filesystem_items_by_host = client.get_latest_item_values_bulk_by_prefix(
+    filesystem_item_metadata_by_host = client.get_items_bulk_by_prefix(
         hostids,
         ZABBIX_FILESYSTEM_ITEM_PREFIXES,
     )
-    for hostid, filesystem_items in filesystem_items_by_host.items():
-        items_by_host.setdefault(hostid, {}).update(filesystem_items)
+    for hostid, filesystem_items in filesystem_item_metadata_by_host.items():
+        latest_values = {
+            str(item["key_"]): str(item["lastvalue"])
+            for item in filesystem_items
+            if item.get("key_") and item.get("lastvalue") not in (None, "")
+        }
+        items_by_host.setdefault(hostid, {}).update(latest_values)
+    availability_items_by_host = client.get_items_bulk(
+        hostids,
+        ZABBIX_AVAILABILITY_ITEM_KEYS,
+    )
     problems_by_host = client.get_current_problems_bulk(hostids)
 
     db = SessionLocal()
@@ -276,6 +287,7 @@ def refresh_zabbix_inventory(group_name: str | None = None, verbose: bool = True
     updated = 0
     deleted = 0
     seen_hostids: set[str] = set()
+    synced_hosts: list[Host] = []
     try:
         latest_snapshots = latest_metric_snapshots(db)
         for zabbix_host in zabbix_hosts:
@@ -298,6 +310,7 @@ def refresh_zabbix_inventory(group_name: str | None = None, verbose: bool = True
             )
             if snapshot is not None:
                 latest_snapshots[host.id] = snapshot
+            synced_hosts.append(host)
             if was_created:
                 created += 1
                 action = "created"
@@ -309,6 +322,23 @@ def refresh_zabbix_inventory(group_name: str | None = None, verbose: bool = True
                     f"{action}: {host.hostname} hostid={host.zabbix_hostid} "
                     f"status={host.monitoring_status} problems={host.problem_count}"
                 )
+        try:
+            backfilled_hosts, backfilled_rows = backfill_zabbix_metric_history(
+                db,
+                client,
+                synced_hosts,
+                filesystem_item_metadata_by_host,
+                availability_items_by_host,
+                settings.zabbix_history_backfill_days,
+            )
+            if verbose and backfilled_hosts:
+                print(
+                    f"Zabbix history backfill: hosts={backfilled_hosts} "
+                    f"snapshots={backfilled_rows}"
+                )
+        except ZabbixApiError as exc:
+            if verbose:
+                print(f"warning: Zabbix history backfill skipped: {exc}")
         deleted = prune_stale_zabbix_hosts(db, seen_hostids, verbose=verbose)
         prune_metric_history(db, settings.metric_history_retention_days)
         db.commit()

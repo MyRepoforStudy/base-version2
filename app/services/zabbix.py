@@ -165,24 +165,73 @@ class ZabbixClient:
     def get_latest_item_values_bulk(
         self, hostids: list[str], item_keys: list[str] | tuple[str, ...]
     ) -> dict[str, dict[str, str]]:
+        items_by_host = self.get_items_bulk(hostids, item_keys)
+        by_host: dict[str, dict[str, str]] = {}
+        for hostid, items in items_by_host.items():
+            for item in items:
+                key = item.get("key_")
+                value = item.get("lastvalue")
+                if not key or value in (None, ""):
+                    continue
+                by_host.setdefault(hostid, {})[str(key)] = str(value)
+        return by_host
+
+    def get_items_bulk(
+        self,
+        hostids: list[str],
+        item_keys: list[str] | tuple[str, ...],
+    ) -> dict[str, list[dict[str, Any]]]:
         if not hostids or not item_keys:
             return {}
         items = self._call(
             "item.get",
             {
-                "output": ["hostid", "key_", "lastvalue"],
+                "output": [
+                    "itemid",
+                    "hostid",
+                    "key_",
+                    "lastvalue",
+                    "value_type",
+                ],
                 "hostids": hostids,
                 "filter": {"key_": list(item_keys)},
             },
         )
-        by_host: dict[str, dict[str, str]] = {}
+        by_host: dict[str, list[dict[str, Any]]] = {}
         for item in items or []:
-            hostid = str(item.get("hostid"))
-            key = item.get("key_")
-            value = item.get("lastvalue")
-            if not hostid or not key or value in (None, ""):
-                continue
-            by_host.setdefault(hostid, {})[str(key)] = str(value)
+            hostid = str(item.get("hostid") or "")
+            if hostid:
+                by_host.setdefault(hostid, []).append(item)
+        return by_host
+
+    def get_items_bulk_by_prefix(
+        self,
+        hostids: list[str],
+        key_prefixes: list[str] | tuple[str, ...],
+    ) -> dict[str, list[dict[str, Any]]]:
+        if not hostids or not key_prefixes:
+            return {}
+        by_host: dict[str, list[dict[str, Any]]] = {}
+        for key_prefix in key_prefixes:
+            items = self._call(
+                "item.get",
+                {
+                    "output": [
+                        "itemid",
+                        "hostid",
+                        "key_",
+                        "lastvalue",
+                        "value_type",
+                    ],
+                    "hostids": hostids,
+                    "search": {"key_": key_prefix},
+                    "startSearch": True,
+                },
+            )
+            for item in items or []:
+                hostid = str(item.get("hostid") or "")
+                if hostid:
+                    by_host.setdefault(hostid, []).append(item)
         return by_host
 
     def get_latest_item_values_bulk_by_prefix(
@@ -190,27 +239,49 @@ class ZabbixClient:
         hostids: list[str],
         key_prefixes: list[str] | tuple[str, ...],
     ) -> dict[str, dict[str, str]]:
-        if not hostids or not key_prefixes:
-            return {}
+        items_by_host = self.get_items_bulk_by_prefix(hostids, key_prefixes)
         by_host: dict[str, dict[str, str]] = {}
-        for key_prefix in key_prefixes:
-            items = self._call(
-                "item.get",
-                {
-                    "output": ["hostid", "key_", "lastvalue"],
-                    "hostids": hostids,
-                    "search": {"key_": key_prefix},
-                    "startSearch": True,
-                },
-            )
-            for item in items or []:
-                hostid = str(item.get("hostid"))
+        for hostid, items in items_by_host.items():
+            for item in items:
                 key = item.get("key_")
                 value = item.get("lastvalue")
-                if not hostid or not key or value in (None, ""):
+                if not key or value in (None, ""):
                     continue
                 by_host.setdefault(hostid, {})[str(key)] = str(value)
         return by_host
+
+    def get_trends(
+        self,
+        itemids: list[str],
+        time_from: int,
+        time_till: int,
+        batch_size: int = 25,
+    ) -> list[dict[str, Any]]:
+        if not itemids:
+            return []
+        trends: list[dict[str, Any]] = []
+        for offset in range(0, len(itemids), max(1, batch_size)):
+            batch = itemids[offset : offset + max(1, batch_size)]
+            result = self._call(
+                "trend.get",
+                {
+                    "output": [
+                        "itemid",
+                        "clock",
+                        "num",
+                        "value_min",
+                        "value_avg",
+                        "value_max",
+                    ],
+                    "itemids": batch,
+                    "time_from": int(time_from),
+                    "time_till": int(time_till),
+                    "sortfield": ["itemid", "clock"],
+                    "sortorder": "ASC",
+                },
+            )
+            trends.extend(result or [])
+        return trends
 
     def get_current_problems(self, hostid: str) -> list[dict[str, Any]]:
         return self._call(

@@ -139,10 +139,19 @@ def availability_sla(
 ) -> AvailabilitySla:
     now = now or datetime.now(UTC)
     window_start = now - timedelta(days=window_days)
-    ordered = sorted(snapshots, key=lambda snapshot: _aware_utc(snapshot.observed_at))
+    available_statuses = {"ok", "problem", "available"}
+    unavailable_statuses = {"down", "unavailable", "disabled"}
+    known_statuses = available_statuses | unavailable_statuses
+    ordered = sorted(
+        (
+            snapshot
+            for snapshot in snapshots
+            if (snapshot.monitoring_status or "unknown").lower() in known_statuses
+        ),
+        key=lambda snapshot: _aware_utc(snapshot.observed_at),
+    )
     known_seconds = 0.0
     available_seconds = 0.0
-    available_statuses = {"ok", "problem", "available"}
 
     for index, snapshot in enumerate(ordered):
         observed_at = _aware_utc(snapshot.observed_at)

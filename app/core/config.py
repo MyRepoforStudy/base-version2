@@ -57,6 +57,7 @@ class Settings:
     zabbix_ca_file: str | None = getenv("ZABBIX_CA_FILE")
     zabbix_host_group: str = getenv("ZABBIX_HOST_GROUP", "Linux servers")
     zabbix_auto_refresh_seconds: int = env_int("ZABBIX_AUTO_REFRESH_SECONDS", 300)
+    zabbix_history_backfill_days: int = env_int("ZABBIX_HISTORY_BACKFILL_DAYS", 30)
     metric_history_interval_seconds: int = env_int("METRIC_HISTORY_INTERVAL_SECONDS", 3600)
     metric_history_retention_days: int = env_int("METRIC_HISTORY_RETENTION_DAYS", 90)
     sla_target_percent: float = env_float("SLA_TARGET_PERCENT", 99.9)

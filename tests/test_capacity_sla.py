@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 from app.services.capacity_sla import availability_sla, capacity_forecast
+from app.services.zabbix_trends import build_host_backfill_rows
 
 
 class CapacitySlaTests(unittest.TestCase):
@@ -64,6 +65,69 @@ class CapacitySlaTests(unittest.TestCase):
         self.assertEqual(sla.coverage_pct, 100.0)
         self.assertAlmostEqual(sla.availability_pct, 95.833, places=3)
         self.assertEqual(sla.status, "missed")
+
+    def test_ignores_capacity_only_snapshots_for_availability(self):
+        now = datetime(2026, 7, 24, 12, 0, tzinfo=UTC)
+        snapshots = [
+            SimpleNamespace(
+                observed_at=now - timedelta(hours=2),
+                monitoring_status="ok",
+            ),
+            SimpleNamespace(
+                observed_at=now - timedelta(hours=1),
+                monitoring_status="unknown",
+            ),
+            SimpleNamespace(
+                observed_at=now,
+                monitoring_status="ok",
+            ),
+        ]
+        sla = availability_sla(
+            snapshots,
+            window_days=1,
+            max_gap_seconds=7200,
+            now=now,
+        )
+        self.assertEqual(sla.availability_pct, 100.0)
+        self.assertEqual(sla.sample_count, 2)
+
+    def test_builds_hourly_backfill_from_zabbix_trends(self):
+        first_hour = datetime(2026, 7, 24, 9, 0, tzinfo=UTC)
+        host = SimpleNamespace(
+            id=7,
+            disk_max_mount="/var",
+        )
+        capacity_item = {"itemid": "100"}
+        availability_item = {"itemid": "200"}
+        trends_by_item = {
+            "100": [
+                {
+                    "clock": str(int((first_hour + timedelta(hours=hour)).timestamp())),
+                    "value_avg": str(60 + hour),
+                }
+                for hour in range(3)
+            ],
+            "200": [
+                {
+                    "clock": str(int(first_hour.timestamp())),
+                    "value_avg": "1",
+                },
+                {
+                    "clock": str(int((first_hour + timedelta(hours=2)).timestamp())),
+                    "value_avg": "1",
+                },
+            ],
+        }
+        rows = build_host_backfill_rows(
+            host,
+            capacity_item,
+            availability_item,
+            trends_by_item,
+        )
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(rows[0]["monitoring_status"], "ok")
+        self.assertEqual(rows[1]["monitoring_status"], "down")
+        self.assertEqual(rows[2]["disk_used_pct"], 62.0)
 
 
 if __name__ == "__main__":

@@ -16,6 +16,10 @@ ZABBIX_SERVER_VENDOR_ITEM_KEY = "vfs.file.contents[/sys/class/dmi/id/sys_vendor]
 ZABBIX_CPU_NUM_ITEM_KEY = "system.cpu.num"
 ZABBIX_MEM_TOTAL_ITEM_KEY = "vm.memory.size[total]"
 ZABBIX_UPTIME_ITEM_KEY = "system.uptime"
+ZABBIX_AVAILABILITY_ITEM_KEYS = (
+    "agent.ping",
+    "icmpping",
+)
 ZABBIX_CPU_UTIL_ITEM_KEYS = (
     "system.cpu.util",
     "system.cpu.util[,idle]",

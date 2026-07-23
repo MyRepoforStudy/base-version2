@@ -61,4 +61,5 @@ class Host(TimestampMixin, Base):
     zabbix_agent_availability: Mapped[str] = mapped_column(String(40), index=True, default="unknown")
     problem_count: Mapped[int] = mapped_column(Integer, default=0)
     zabbix_last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    metric_history_backfilled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     monitoring_status: Mapped[str] = mapped_column(String(40), index=True, default="unknown")
