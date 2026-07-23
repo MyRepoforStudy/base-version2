@@ -53,11 +53,13 @@ def dashboard(
     view: str = "overview",
     environment: str | None = None,
     virtual: str | None = None,
+    proxmox: str | None = None,
+    system: str | None = None,
     refresh: bool = False,
     db: Session = Depends(get_db),
 ):
     current_view = view if view in {"overview", "hosts"} else "overview"
-    filters = active_filters(environment, virtual)
+    filters = active_filters(environment, virtual, proxmox, system)
     zabbix_refresh_error = maybe_refresh_zabbix_cache(db, force=refresh)
 
     all_hosts = db.scalars(select(Host).order_by(Host.hostname)).all()
@@ -100,7 +102,7 @@ def dashboard(
         zabbix_inventory_warning = "No cached Zabbix hosts yet. Click Refresh Zabbix to load live data."
 
     hosts_stmt = select(Host).order_by(Host.hostname)
-    hosts_stmt = apply_host_filters(hosts_stmt, environment, virtual)
+    hosts_stmt = apply_host_filters(hosts_stmt, environment, virtual, proxmox, system)
     filtered_hosts = db.scalars(hosts_stmt).all()
 
     chart_data = {

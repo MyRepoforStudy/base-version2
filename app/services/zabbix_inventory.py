@@ -21,6 +21,8 @@ from app.services.zabbix_items import (
 
 ENVIRONMENT_TAG_NAMES = ("environment", "env")
 DATACENTER_TAG_NAMES = ("datacenter", "data_center", "dc")
+PROXMOX_TAG_NAMES = ("proxmox",)
+SYSTEM_TAG_NAMES = ("system",)
 
 
 def normalize_tags(raw_tags: list[dict]) -> dict[str, list[str]]:
@@ -105,6 +107,8 @@ def upsert_host(
     host.ip_address = client.primary_interface_address(zabbix_host)
     host.environment = environment_from_tags(tags)
     host.datacenter = datacenter_from_tags(tags)
+    host.proxmox = first_tag_value(tags, PROXMOX_TAG_NAMES)
+    host.system = first_tag_value(tags, SYSTEM_TAG_NAMES)
     host.os_name = os_name
     host.vendor = vendor
     host.model = model

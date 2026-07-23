@@ -34,6 +34,24 @@
           <option value="NO" {% if active_virtual_filter == "NO" %}selected{% endif %}>Physical</option>
         </select>
       </label>
+      <label>
+        Proxmox
+        <select class="form-select form-select-sm" name="proxmox">
+          <option value="">All</option>
+          {% for value in filter_options.proxmox_values %}
+            <option value="{{ value }}" {% if filters.proxmox == value %}selected{% endif %}>{{ value }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        System
+        <select class="form-select form-select-sm" name="system">
+          <option value="">All</option>
+          {% for value in filter_options.system_values %}
+            <option value="{{ value }}" {% if filters.system == value %}selected{% endif %}>{{ value }}</option>
+          {% endfor %}
+        </select>
+      </label>
       <div class="overview-filter-actions">
         <button class="btn btn-primary btn-sm" type="submit">Apply</button>
         <a class="btn btn-outline-secondary btn-sm" href="/?view={{ current_view }}">Reset</a>
@@ -54,6 +72,8 @@
           <input type="hidden" name="view" value="{{ current_view }}">
           <input type="hidden" name="environment" value="{{ filters.environment or '' }}">
           <input type="hidden" name="virtual" value="{{ active_virtual_filter or '' }}">
+          <input type="hidden" name="proxmox" value="{{ filters.proxmox or '' }}">
+          <input type="hidden" name="system" value="{{ filters.system or '' }}">
           <input type="hidden" name="refresh" value="1">
           <button class="btn btn-outline-secondary btn-sm" type="submit">
             <i class="bi bi-arrow-repeat"></i> Refresh Zabbix
@@ -206,6 +226,8 @@
                 <th>Server</th>
                 <th>IP</th>
                 <th>Environment</th>
+                <th>System</th>
+                <th>Proxmox</th>
                 <th>Virtual</th>
                 <th>Vendor</th>
                 <th>Model</th>
@@ -221,6 +243,8 @@
                   <td><a class="table-link" href="/hosts/{{ host.id }}">{{ host.zabbix_host_name or host.hostname }}</a></td>
                   <td>{{ host.ip_address or "-" }}</td>
                   <td><span class="pill env-pill env-{{ (host.environment or 'unknown')|lower }}">{{ host.environment }}</span></td>
+                  <td>{{ host.system or "-" }}</td>
+                  <td>{{ host.proxmox or "-" }}</td>
                   <td>{{ "YES" if host.virtual else "NO" }}</td>
                   <td>{{ host.vendor or "-" }}</td>
                   <td>{{ host.model or "-" }}</td>
@@ -230,7 +254,7 @@
                   <td><span class="badge text-bg-{{ host.monitoring_status|status_class }}">{{ host.monitoring_status }}</span></td>
                 </tr>
               {% else %}
-                <tr><td colspan="10" class="empty-state">No servers found.</td></tr>
+                <tr><td colspan="12" class="empty-state">No servers found.</td></tr>
               {% endfor %}
             </tbody>
           </table>

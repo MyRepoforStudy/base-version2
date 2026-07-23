@@ -16,6 +16,8 @@ class Host(TimestampMixin, Base):
     ip_address: Mapped[str | None] = mapped_column(String(64))
     environment: Mapped[str] = mapped_column(String(40), index=True, default="UNKNOWN")
     datacenter: Mapped[str] = mapped_column(String(40), index=True, default="Unknown")
+    proxmox: Mapped[str | None] = mapped_column(String(120), index=True)
+    system: Mapped[str | None] = mapped_column(String(120), index=True)
     virtual: Mapped[bool] = mapped_column(Boolean, default=True)
     vendor: Mapped[str | None] = mapped_column(String(120))
     model: Mapped[str | None] = mapped_column(String(120))

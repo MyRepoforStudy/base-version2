@@ -6,8 +6,13 @@ from sqlalchemy.orm import Session
 from app.models import Host
 
 
-def active_filters(environment: str | None = None, virtual: str | None = None) -> dict[str, str]:
-    values = {"environment": environment, "virtual": virtual}
+def active_filters(
+    environment: str | None = None,
+    virtual: str | None = None,
+    proxmox: str | None = None,
+    system: str | None = None,
+) -> dict[str, str]:
+    values = {"environment": environment, "virtual": virtual, "proxmox": proxmox, "system": system}
     return {key: value for key, value in values.items() if value}
 
 
@@ -17,7 +22,11 @@ def distinct_values(db: Session, column) -> list[str]:
 
 
 def get_filter_options(db: Session) -> dict[str, list[str]]:
-    return {"environments": distinct_values(db, Host.environment)}
+    return {
+        "environments": distinct_values(db, Host.environment),
+        "proxmox_values": distinct_values(db, Host.proxmox),
+        "system_values": distinct_values(db, Host.system),
+    }
 
 
 def normalized_virtual_filter(value: str | None) -> str | None:
@@ -25,7 +34,13 @@ def normalized_virtual_filter(value: str | None) -> str | None:
     return normalized if normalized in {"YES", "NO"} else None
 
 
-def apply_host_filters(stmt: Select, environment: str | None = None, virtual: str | None = None) -> Select:
+def apply_host_filters(
+    stmt: Select,
+    environment: str | None = None,
+    virtual: str | None = None,
+    proxmox: str | None = None,
+    system: str | None = None,
+) -> Select:
     if environment:
         stmt = stmt.where(Host.environment == environment.upper())
     active_virtual = normalized_virtual_filter(virtual)
@@ -33,6 +48,10 @@ def apply_host_filters(stmt: Select, environment: str | None = None, virtual: st
         stmt = stmt.where(Host.virtual.is_(True))
     elif active_virtual == "NO":
         stmt = stmt.where(Host.virtual.is_(False))
+    if proxmox:
+        stmt = stmt.where(Host.proxmox == proxmox)
+    if system:
+        stmt = stmt.where(Host.system == system)
     return stmt
 
 
