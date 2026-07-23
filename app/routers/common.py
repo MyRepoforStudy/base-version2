@@ -10,6 +10,7 @@ from app.services.compliance import (
     last_reboot_at,
     lifecycle_status,
 )
+from app.services.host_health import server_health
 
 
 def active_filters(
@@ -20,6 +21,7 @@ def active_filters(
     os_family: str | None = None,
     q: str | None = None,
     lifecycle: str | None = None,
+    health: str | None = None,
 ) -> dict[str, str]:
     values = {
         "environment": environment,
@@ -29,6 +31,7 @@ def active_filters(
         "os_family": os_family,
         "q": q,
         "lifecycle": lifecycle,
+        "health": health,
     }
     return {key: value for key, value in values.items() if value}
 
@@ -124,13 +127,20 @@ def lifecycle_status_for_host(host: Host) -> str:
     return lifecycle_status(host.os_support_end_date)
 
 
+def health_for_host(host: Host):
+    return server_health(host)
+
+
 def apply_operational_filters(
     hosts: list[Host],
     lifecycle: str | None = None,
+    health: str | None = None,
 ) -> list[Host]:
     selected = hosts
     if lifecycle:
         selected = [host for host in selected if lifecycle_status_for_host(host) == lifecycle]
+    if health:
+        selected = [host for host in selected if health_for_host(host).status == health]
     return selected
 
 
@@ -146,6 +156,16 @@ SORT_COLUMNS: dict[str, object] = {
     "cpu_cores": lambda host: host.cpu_cores if host.cpu_cores is not None else -1,
     "ram_gb": lambda host: host.ram_gb if host.ram_gb is not None else -1,
     "uptime_seconds": lambda host: host.uptime_seconds if host.uptime_seconds is not None else -1,
+    "health_score": lambda host: server_health(host).score,
+    "cpu_utilization_pct": lambda host: (
+        host.cpu_utilization_pct if host.cpu_utilization_pct is not None else -1
+    ),
+    "memory_utilization_pct": lambda host: (
+        host.memory_utilization_pct if host.memory_utilization_pct is not None else -1
+    ),
+    "disk_max_used_pct": lambda host: (
+        host.disk_max_used_pct if host.disk_max_used_pct is not None else -1
+    ),
     "os_name": lambda host: (host.os_name or "").lower(),
     "monitoring_status": lambda host: host.monitoring_status or "",
     "os_lifecycle": lambda host: (

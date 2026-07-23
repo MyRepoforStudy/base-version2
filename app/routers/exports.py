@@ -9,11 +9,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.models import Host
+from app.models import Host, HostFilesystem
 from app.routers.common import (
     apply_host_filters,
     apply_operational_filters,
     format_uptime,
+    health_for_host,
     last_reboot_at_for_host,
     lifecycle_status_for_host,
 )
@@ -41,13 +42,14 @@ def export_hosts(
     system: str | None = None,
     criticality: str | None = None,
     lifecycle: str | None = None,
+    health: str | None = None,
     db: Session = Depends(get_db),
 ):
     maybe_refresh_zabbix_cache(db)
     stmt = select(Host).order_by(Host.hostname)
     stmt = apply_host_filters(stmt, environment, virtual, proxmox, system, criticality)
     hosts = db.scalars(stmt).all()
-    hosts = apply_operational_filters(hosts, lifecycle=lifecycle)
+    hosts = apply_operational_filters(hosts, lifecycle=lifecycle, health=health)
 
     headers = [
         "hostname",
@@ -62,6 +64,17 @@ def export_hosts(
         "uptime_seconds",
         "uptime",
         "last_reboot_at",
+        "health_score",
+        "health_status",
+        "cpu_utilization_pct",
+        "memory_utilization_pct",
+        "load_average_1m",
+        "root_disk_total_gb",
+        "root_disk_used_gb",
+        "root_disk_used_pct",
+        "disk_max_mount",
+        "disk_max_used_pct",
+        "metrics_collected_at",
         "os_name",
         "os_family",
         "os_version",
@@ -84,6 +97,7 @@ def export_hosts(
     ws.append(headers)
     for host in hosts:
         last_reboot = last_reboot_at_for_host(host)
+        health = health_for_host(host)
         ws.append(
             [
                 host.hostname,
@@ -98,6 +112,17 @@ def export_hosts(
                 host.uptime_seconds,
                 format_uptime(host.uptime_seconds),
                 last_reboot.replace(tzinfo=None) if last_reboot else None,
+                health.score,
+                health.status,
+                host.cpu_utilization_pct,
+                host.memory_utilization_pct,
+                host.load_average_1m,
+                host.root_disk_total_gb,
+                host.root_disk_used_gb,
+                host.root_disk_used_pct,
+                host.disk_max_mount,
+                host.disk_max_used_pct,
+                host.metrics_collected_at.replace(tzinfo=None) if host.metrics_collected_at else None,
                 host.os_name,
                 host.os_family,
                 host.os_version,
@@ -116,6 +141,36 @@ def export_hosts(
             ]
         )
     apply_sheet_style(ws, headers)
+
+    filesystem_headers = [
+        "hostname",
+        "mount_point",
+        "total_gb",
+        "used_gb",
+        "used_pct",
+        "collected_at",
+    ]
+    filesystem_ws = workbook.create_sheet("Filesystems")
+    filesystem_ws.append(filesystem_headers)
+    hostnames_by_id = {host.id: host.hostname for host in hosts}
+    if hostnames_by_id:
+        filesystems = db.scalars(
+            select(HostFilesystem)
+            .where(HostFilesystem.host_id.in_(list(hostnames_by_id)))
+            .order_by(HostFilesystem.host_id, HostFilesystem.mount_point)
+        ).all()
+        for filesystem in filesystems:
+            filesystem_ws.append(
+                [
+                    hostnames_by_id.get(filesystem.host_id),
+                    filesystem.mount_point,
+                    filesystem.total_gb,
+                    filesystem.used_gb,
+                    filesystem.used_pct,
+                    filesystem.collected_at.replace(tzinfo=None),
+                ]
+            )
+    apply_sheet_style(filesystem_ws, filesystem_headers)
 
     stream = BytesIO()
     workbook.save(stream)

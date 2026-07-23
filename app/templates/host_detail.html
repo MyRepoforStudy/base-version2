@@ -11,6 +11,23 @@
 </div>
 
 <div class="metric-grid mb-3">
+  <div class="content-panel health-score-panel">
+    <div class="panel-title">
+      <h2>Server Health Score</h2>
+      <span class="badge text-bg-{{ health.status|status_class }}">{{ health.status|title }}</span>
+    </div>
+    <div class="health-score-value">{{ health.score }}<small>/100</small></div>
+    <div class="metric-progress mb-2">
+      <span class="metric-progress-{{ health.status }}" style="width: {{ health.score }}%"></span>
+    </div>
+    {% if health.reasons %}
+      <ul class="health-reasons">
+        {% for reason in health.reasons %}<li>{{ reason }}</li>{% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-success small mb-0">No active health deductions.</p>
+    {% endif %}
+  </div>
   <div class="content-panel">
     <div class="panel-title"><h2>Monitoring</h2></div>
     <div class="stack-list">
@@ -49,6 +66,65 @@
     </div>
   </div>
   <div class="content-panel">
+    <div class="panel-title">
+      <h2>Performance Health</h2>
+      <span class="text-muted small">{{ host.metrics_collected_at|date_time }}</span>
+    </div>
+    <div class="performance-metric">
+      <div>
+        <span>CPU utilization</span>
+        <strong>{{ (host.cpu_utilization_pct ~ "%") if host.cpu_utilization_pct is not none else "-" }}</strong>
+      </div>
+      <div class="metric-progress">
+        <span class="metric-progress-{{ cpu_status }}" style="width: {{ host.cpu_utilization_pct or 0 }}%"></span>
+      </div>
+    </div>
+    <div class="performance-metric">
+      <div>
+        <span>Memory utilization</span>
+        <strong>{{ (host.memory_utilization_pct ~ "%") if host.memory_utilization_pct is not none else "-" }}</strong>
+      </div>
+      <div class="metric-progress">
+        <span class="metric-progress-{{ memory_status }}" style="width: {{ host.memory_utilization_pct or 0 }}%"></span>
+      </div>
+    </div>
+    <div class="stack-row mt-2"><span>Load average (1m)</span><span>{{ host.load_average_1m if host.load_average_1m is not none else "-" }}</span></div>
+  </div>
+  <div class="content-panel">
+    <div class="panel-title">
+      <h2>Disk Capacity</h2>
+      <span class="badge text-bg-{{ disk_status|status_class }}">{{ disk_status|title }}</span>
+    </div>
+    <div class="disk-capacity-value">
+      {{ (host.disk_max_used_pct ~ "%") if host.disk_max_used_pct is not none else "-" }}
+      <small>fullest filesystem: {{ host.disk_max_mount or "-" }}</small>
+    </div>
+    <div class="metric-progress mb-3">
+      <span class="metric-progress-{{ disk_status }}" style="width: {{ host.disk_max_used_pct or 0 }}%"></span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm mb-0 filesystem-table">
+        <thead><tr><th>Mount</th><th>Used</th><th>Total</th><th>Usage</th></tr></thead>
+        <tbody>
+          {% for filesystem in filesystems %}
+            <tr>
+              <td>{{ filesystem.mount_point }}</td>
+              <td>{{ (filesystem.used_gb ~ " GB") if filesystem.used_gb is not none else "-" }}</td>
+              <td>{{ (filesystem.total_gb ~ " GB") if filesystem.total_gb is not none else "-" }}</td>
+              <td>
+                <span class="badge text-bg-{{ disk_capacity_status(filesystem.used_pct)|status_class }}">
+                  {{ (filesystem.used_pct ~ "%") if filesystem.used_pct is not none else "-" }}
+                </span>
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="4" class="text-muted">No filesystem metrics.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="content-panel">
     <div class="panel-title"><h2>Ownership & Criticality</h2></div>
     <div class="stack-list">
       <div class="stack-row"><span>Owner</span><span>{{ host.owner or "-" }}</span></div>
@@ -59,6 +135,39 @@
     </div>
   </div>
 </div>
+
+<section class="content-panel mb-3">
+  <div class="panel-title">
+    <h2>Change History</h2>
+    <span class="text-muted small">Latest {{ changes|length }} changes</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle overview-table change-history-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Source</th>
+          <th>Field</th>
+          <th>Previous value</th>
+          <th>New value</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for change in changes %}
+          <tr>
+            <td>{{ change.changed_at|date_time }}</td>
+            <td><span class="badge text-bg-{{ 'info' if change.source == 'admin' else 'secondary' }}">{{ change.source|upper }}</span></td>
+            <td>{{ host_change_label(change.field_name) }}</td>
+            <td>{{ change.old_value or "-" }}</td>
+            <td>{{ change.new_value or "-" }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="5" class="empty-state">No changes recorded yet. History starts after this update.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
 
 {% if host.zabbix_url %}
   <a class="btn btn-outline-primary btn-sm" href="{{ host.zabbix_url }}" target="_blank" rel="noreferrer">

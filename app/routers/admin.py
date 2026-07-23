@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.models import Host
+from app.services.change_history import host_change_snapshot, record_host_changes
 from app.services.compliance import normalize_criticality
 from app.web import templates
 
@@ -95,6 +96,7 @@ async def admin_support_save(request: Request, db: Session = Depends(get_db)):
         host = db.get(Host, host_id)
         if host is None:
             continue
+        before = host_change_snapshot(host)
         raw_value = first_value(form_data, f"support_end_date_{host_id}").strip()
         if raw_value:
             try:
@@ -103,6 +105,7 @@ async def admin_support_save(request: Request, db: Session = Depends(get_db)):
                 continue
         else:
             host.support_end_date = None
+        record_host_changes(db, host, before, source="admin")
     db.commit()
     return RedirectResponse("/admin/support?saved=1", status_code=303)
 
@@ -137,10 +140,12 @@ async def admin_ownership_save(request: Request, db: Session = Depends(get_db)):
         host = db.get(Host, host_id)
         if host is None:
             continue
+        before = host_change_snapshot(host)
         host.owner = clean_text(first_value(form_data, f"owner_{host_id}"))
         host.department = clean_text(first_value(form_data, f"department_{host_id}"))
         host.business_service = clean_text(first_value(form_data, f"business_service_{host_id}"))
         host.criticality = normalize_criticality(first_value(form_data, f"criticality_{host_id}"))
         host.notes = clean_text(first_value(form_data, f"notes_{host_id}"), max_length=2000)
+        record_host_changes(db, host, before, source="admin")
     db.commit()
     return RedirectResponse("/admin/ownership?saved=1", status_code=303)

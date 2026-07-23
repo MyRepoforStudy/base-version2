@@ -1,4 +1,5 @@
 from collections import Counter
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
@@ -6,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.models import Host
+from app.models import Host, HostChange
 from app.routers.common import (
     active_filters,
     apply_host_filters,
@@ -15,6 +16,7 @@ from app.routers.common import (
     apply_search_filter,
     format_uptime,
     get_filter_options,
+    health_for_host,
     last_reboot_at_for_host,
     lifecycle_status_for_host,
     normalized_virtual_filter,
@@ -22,6 +24,7 @@ from app.routers.common import (
     sort_hosts,
     support_status_label,
 )
+from app.services.host_health import disk_capacity_status, utilization_status
 from app.services.zabbix_refresh import maybe_refresh_zabbix_cache
 from app.web import templates
 
@@ -39,6 +42,7 @@ def dashboard(
     os_family: str | None = None,
     q: str | None = None,
     lifecycle: str | None = None,
+    health: str | None = None,
     sort: str | None = None,
     dir: str = "asc",
     refresh: bool = False,
@@ -53,6 +57,7 @@ def dashboard(
         os_family=os_family,
         q=q,
         lifecycle=lifecycle,
+        health=health,
     )
     zabbix_refresh_error = maybe_refresh_zabbix_cache(db, force=refresh)
 
@@ -76,6 +81,27 @@ def dashboard(
 
     monitoring_counter = Counter((host.monitoring_status or "unknown") for host in all_hosts)
     monitoring_counts = sorted(monitoring_counter.items())
+    health_results = {host.id: health_for_host(host) for host in all_hosts}
+    health_counts = Counter(result.status for result in health_results.values())
+    average_health_score = (
+        round(sum(result.score for result in health_results.values()) / total)
+        if total
+        else 0
+    )
+    disk_pressure_count = sum(
+        1 for host in all_hosts if disk_capacity_status(host.disk_max_used_pct) in {"warning", "critical"}
+    )
+    performance_pressure_count = sum(
+        1
+        for host in all_hosts
+        if utilization_status(host.cpu_utilization_pct) in {"warning", "critical"}
+        or utilization_status(host.memory_utilization_pct) in {"warning", "critical"}
+    )
+    recent_change_count = db.scalar(
+        select(func.count(HostChange.id)).where(
+            HostChange.changed_at >= datetime.now(UTC) - timedelta(days=7)
+        )
+    ) or 0
     physical_server_rows = [
         {
             "host": host,
@@ -99,7 +125,11 @@ def dashboard(
     filtered_hosts = db.scalars(hosts_stmt).all()
     filtered_hosts = apply_os_family_filter(filtered_hosts, os_family)
     filtered_hosts = apply_search_filter(filtered_hosts, q)
-    filtered_hosts = apply_operational_filters(filtered_hosts, lifecycle=lifecycle)
+    filtered_hosts = apply_operational_filters(
+        filtered_hosts,
+        lifecycle=lifecycle,
+        health=health,
+    )
     sort_dir = "desc" if dir == "desc" else "asc"
     filtered_hosts = sort_hosts(filtered_hosts, sort, sort_dir)
 
@@ -133,6 +163,11 @@ def dashboard(
             "datacenter_counts": datacenter_counts,
             "os_counts": os_counts,
             "monitoring_counts": monitoring_counts,
+            "health_counts": health_counts,
+            "average_health_score": average_health_score,
+            "disk_pressure_count": disk_pressure_count,
+            "performance_pressure_count": performance_pressure_count,
+            "recent_change_count": recent_change_count,
             "physical_server_rows": physical_server_rows,
             "last_sync_at": last_sync_at,
             "zabbix_refresh_error": zabbix_refresh_error,
@@ -145,6 +180,9 @@ def dashboard(
             "sort_dir": sort_dir,
             "chart_data": chart_data,
             "format_uptime": format_uptime,
+            "health_for_host": health_for_host,
+            "disk_capacity_status": disk_capacity_status,
+            "utilization_status": utilization_status,
             "last_reboot_at_for_host": last_reboot_at_for_host,
             "lifecycle_status_for_host": lifecycle_status_for_host,
         },

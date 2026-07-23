@@ -6,7 +6,7 @@
   {% set new_dir = 'desc' if sort == column and sort_dir == 'asc' else 'asc' %}
   <th>
     <a
-      href="/?view=hosts&environment={{ (filters.environment or '')|urlencode }}&virtual={{ (active_virtual_filter or '')|urlencode }}&os_family={{ (filters.os_family or '')|urlencode }}&proxmox={{ (filters.proxmox or '')|urlencode }}&system={{ (filters.system or '')|urlencode }}&lifecycle={{ (filters.lifecycle or '')|urlencode }}&q={{ (filters.q or '')|urlencode }}&sort={{ column }}&dir={{ new_dir }}"
+      href="/?view=hosts&environment={{ (filters.environment or '')|urlencode }}&virtual={{ (active_virtual_filter or '')|urlencode }}&os_family={{ (filters.os_family or '')|urlencode }}&proxmox={{ (filters.proxmox or '')|urlencode }}&system={{ (filters.system or '')|urlencode }}&lifecycle={{ (filters.lifecycle or '')|urlencode }}&health={{ (filters.health or '')|urlencode }}&q={{ (filters.q or '')|urlencode }}&sort={{ column }}&dir={{ new_dir }}"
       style="color: inherit; text-decoration: none; white-space: nowrap;"
     >
       {{ label }}
@@ -88,6 +88,15 @@
             <option value="unknown" {% if filters.lifecycle == "unknown" %}selected{% endif %}>Unknown</option>
           </select>
         </label>
+        <label>
+          Health
+          <select class="form-select form-select-sm" name="health">
+            <option value="">All</option>
+            <option value="healthy" {% if filters.health == "healthy" %}selected{% endif %}>Healthy</option>
+            <option value="warning" {% if filters.health == "warning" %}selected{% endif %}>Warning</option>
+            <option value="critical" {% if filters.health == "critical" %}selected{% endif %}>Critical</option>
+          </select>
+        </label>
         <div class="overview-filter-actions">
           <button class="btn btn-primary btn-sm" type="submit">Apply</button>
           <a class="btn btn-outline-secondary btn-sm" href="/?view={{ current_view }}">Reset</a>
@@ -113,6 +122,7 @@
           <input type="hidden" name="system" value="{{ filters.system or '' }}">
           <input type="hidden" name="os_family" value="{{ filters.os_family or '' }}">
           <input type="hidden" name="lifecycle" value="{{ filters.lifecycle or '' }}">
+          <input type="hidden" name="health" value="{{ filters.health or '' }}">
           <input type="hidden" name="q" value="{{ filters.q or '' }}">
           <input type="hidden" name="sort" value="{{ sort or '' }}">
           <input type="hidden" name="dir" value="{{ sort_dir or '' }}">
@@ -121,7 +131,7 @@
             <i class="bi bi-arrow-repeat"></i> Refresh Zabbix
           </button>
         </form>
-        <a class="btn btn-success btn-sm" href="/exports/hosts.xlsx?environment={{ (filters.environment or '')|urlencode }}&virtual={{ (active_virtual_filter or '')|urlencode }}&proxmox={{ (filters.proxmox or '')|urlencode }}&system={{ (filters.system or '')|urlencode }}&lifecycle={{ (filters.lifecycle or '')|urlencode }}"><i class="bi bi-file-earmark-excel"></i> Export Servers</a>
+        <a class="btn btn-success btn-sm" href="/exports/hosts.xlsx?environment={{ (filters.environment or '')|urlencode }}&virtual={{ (active_virtual_filter or '')|urlencode }}&proxmox={{ (filters.proxmox or '')|urlencode }}&system={{ (filters.system or '')|urlencode }}&lifecycle={{ (filters.lifecycle or '')|urlencode }}&health={{ (filters.health or '')|urlencode }}"><i class="bi bi-file-earmark-excel"></i> Export Servers</a>
       </div>
     </header>
 
@@ -140,6 +150,40 @@
     {% endif %}
 
     {% if current_view == "overview" %}
+      <div class="operations-kpi-grid">
+        <section class="operations-kpi-card">
+          <span class="operations-kpi-icon operations-kpi-health"><i class="bi bi-heart-pulse"></i></span>
+          <div>
+            <small>Average Health Score</small>
+            <strong>{{ average_health_score }}/100</strong>
+            <span>{{ health_counts.get("healthy", 0) }} healthy servers</span>
+          </div>
+        </section>
+        <section class="operations-kpi-card">
+          <span class="operations-kpi-icon operations-kpi-disk"><i class="bi bi-device-hdd"></i></span>
+          <div>
+            <small>Disk Capacity</small>
+            <strong>{{ disk_pressure_count }}</strong>
+            <span>servers at or above 80%</span>
+          </div>
+        </section>
+        <section class="operations-kpi-card">
+          <span class="operations-kpi-icon operations-kpi-performance"><i class="bi bi-speedometer2"></i></span>
+          <div>
+            <small>Performance Health</small>
+            <strong>{{ performance_pressure_count }}</strong>
+            <span>CPU or RAM pressure</span>
+          </div>
+        </section>
+        <section class="operations-kpi-card">
+          <span class="operations-kpi-icon operations-kpi-history"><i class="bi bi-clock-history"></i></span>
+          <div>
+            <small>Change History</small>
+            <strong>{{ recent_change_count }}</strong>
+            <span>changes during last 7 days</span>
+          </div>
+        </section>
+      </div>
       <div class="executive-grid executive-summary-grid">
         <section class="overview-panel executive-panel executive-chart-panel">
           <div class="overview-section-heading">
@@ -286,7 +330,11 @@
                 {{ sort_th('vendor', 'Vendor') }}
                 {{ sort_th('model', 'Model') }}
                 {{ sort_th('cpu_cores', 'CPU') }}
-                {{ sort_th('ram_gb', 'RAM') }}
+                {{ sort_th('ram_gb', 'RAM total') }}
+                {{ sort_th('health_score', 'Health') }}
+                {{ sort_th('cpu_utilization_pct', 'CPU %') }}
+                {{ sort_th('memory_utilization_pct', 'RAM %') }}
+                {{ sort_th('disk_max_used_pct', 'Disk max') }}
                 {{ sort_th('uptime_seconds', 'Uptime') }}
                 {{ sort_th('os_name', 'Operating system') }}
                 {{ sort_th('os_lifecycle', 'OS lifecycle') }}
@@ -308,6 +356,30 @@
                   <td>{{ host.model or "-" }}</td>
                   <td>{{ host.cpu_cores or "-" }}</td>
                   <td>{{ (host.ram_gb ~ " GB") if host.ram_gb else "-" }}</td>
+                  {% set health = health_for_host(host) %}
+                  <td>
+                    <span class="badge text-bg-{{ health.status|status_class }}">{{ health.score }}/100</span>
+                    <small class="d-block text-muted mt-1">{{ health.status|title }}</small>
+                  </td>
+                  <td>
+                    {% set cpu_status = utilization_status(host.cpu_utilization_pct) %}
+                    <span class="badge text-bg-{{ cpu_status|status_class }}">
+                      {{ (host.cpu_utilization_pct ~ "%") if host.cpu_utilization_pct is not none else "-" }}
+                    </span>
+                  </td>
+                  <td>
+                    {% set memory_status = utilization_status(host.memory_utilization_pct) %}
+                    <span class="badge text-bg-{{ memory_status|status_class }}">
+                      {{ (host.memory_utilization_pct ~ "%") if host.memory_utilization_pct is not none else "-" }}
+                    </span>
+                  </td>
+                  <td>
+                    {% set disk_status = disk_capacity_status(host.disk_max_used_pct) %}
+                    <span class="badge text-bg-{{ disk_status|status_class }}">
+                      {{ (host.disk_max_used_pct ~ "%") if host.disk_max_used_pct is not none else "-" }}
+                    </span>
+                    <small class="d-block text-muted mt-1">{{ host.disk_max_mount or "-" }}</small>
+                  </td>
                   {% set last_reboot_at = last_reboot_at_for_host(host) %}
                   <td>
                     <strong>{{ format_uptime(host.uptime_seconds) }}</strong>
@@ -324,7 +396,7 @@
                   <td><span class="badge text-bg-{{ host.monitoring_status|status_class }}">{{ host.monitoring_status }}</span></td>
                 </tr>
               {% else %}
-                <tr><td colspan="16" class="empty-state">No servers found.</td></tr>
+                <tr><td colspan="20" class="empty-state">No servers found.</td></tr>
               {% endfor %}
             </tbody>
           </table>

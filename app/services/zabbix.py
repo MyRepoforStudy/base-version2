@@ -185,6 +185,33 @@ class ZabbixClient:
             by_host.setdefault(hostid, {})[str(key)] = str(value)
         return by_host
 
+    def get_latest_item_values_bulk_by_prefix(
+        self,
+        hostids: list[str],
+        key_prefixes: list[str] | tuple[str, ...],
+    ) -> dict[str, dict[str, str]]:
+        if not hostids or not key_prefixes:
+            return {}
+        by_host: dict[str, dict[str, str]] = {}
+        for key_prefix in key_prefixes:
+            items = self._call(
+                "item.get",
+                {
+                    "output": ["hostid", "key_", "lastvalue"],
+                    "hostids": hostids,
+                    "search": {"key_": key_prefix},
+                    "startSearch": True,
+                },
+            )
+            for item in items or []:
+                hostid = str(item.get("hostid"))
+                key = item.get("key_")
+                value = item.get("lastvalue")
+                if not hostid or not key or value in (None, ""):
+                    continue
+                by_host.setdefault(hostid, {})[str(key)] = str(value)
+        return by_host
+
     def get_current_problems(self, hostid: str) -> list[dict[str, Any]]:
         return self._call(
             "problem.get",

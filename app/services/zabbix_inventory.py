@@ -6,19 +6,23 @@ from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.db.session import SessionLocal
-from app.models import Host
+from app.models import Host, HostFilesystem
 from app.services.zabbix import ZabbixClient
 from app.services.zabbix_items import (
     ZABBIX_DETAIL_ITEM_KEYS,
+    ZABBIX_FILESYSTEM_ITEM_PREFIXES,
     cpu_cores_from_items,
+    filesystem_inventory_from_items,
     is_virtual_platform,
     operating_system_item_label,
     patch_inventory_from_items,
+    performance_inventory_from_items,
     ram_gb_from_items,
     server_model_item_label,
     server_vendor_item_label,
     uptime_seconds_from_items,
 )
+from app.services.change_history import host_change_snapshot, record_host_changes
 from app.services.compliance import normalize_criticality, parse_date_value, resolve_os_lifecycle
 
 ENVIRONMENT_TAG_NAMES = ("environment", "env")
@@ -80,6 +84,35 @@ def normalize_inventory(raw_inventory) -> dict:
     return {}
 
 
+def sync_host_filesystems(
+    db,
+    host: Host,
+    filesystem_inventory: list[dict[str, float | str | None]],
+    observed_at: datetime,
+) -> None:
+    existing_filesystems = {
+        filesystem.mount_point: filesystem
+        for filesystem in db.scalars(
+            select(HostFilesystem).where(HostFilesystem.host_id == host.id)
+        ).all()
+    }
+    seen_mount_points: set[str] = set()
+    for metric in filesystem_inventory:
+        mount_point = str(metric["mount_point"])
+        seen_mount_points.add(mount_point)
+        filesystem = existing_filesystems.get(mount_point)
+        if filesystem is None:
+            filesystem = HostFilesystem(host_id=host.id, mount_point=mount_point)
+            db.add(filesystem)
+        filesystem.total_gb = metric["total_gb"]
+        filesystem.used_gb = metric["used_gb"]
+        filesystem.used_pct = metric["used_pct"]
+        filesystem.collected_at = observed_at
+    for mount_point, filesystem in existing_filesystems.items():
+        if mount_point not in seen_mount_points:
+            db.delete(filesystem)
+
+
 def upsert_host(
     db,
     zabbix_host: dict,
@@ -97,6 +130,8 @@ def upsert_host(
     os_support_end_override = parse_date_value(first_tag_value(tags, OS_SUPPORT_END_TAG_NAMES))
     os_lifecycle = resolve_os_lifecycle(os_name, os_support_end_override)
     patch_inventory = patch_inventory_from_items(item_values)
+    performance_inventory = performance_inventory_from_items(item_values)
+    filesystem_inventory = filesystem_inventory_from_items(item_values)
     vendor = server_vendor_item_label(item_values, inventory.get("vendor"))
     model = server_model_item_label(item_values, inventory.get("hardware_full") or inventory.get("hardware"))
     problem_count = len(problems)
@@ -111,6 +146,8 @@ def upsert_host(
         created = True
         host = Host(hostname=inventory_hostname)
         db.add(host)
+    before = host_change_snapshot(host) if not created else None
+    observed_at = datetime.now(UTC)
 
     host.hostname = inventory_hostname
     host.fqdn = zabbix_host.get("host")
@@ -130,12 +167,34 @@ def upsert_host(
     host.cpu_cores = cpu_cores_from_items(item_values)
     host.ram_gb = ram_gb_from_items(item_values)
     host.uptime_seconds = uptime_seconds_from_items(item_values)
+    host.cpu_utilization_pct = performance_inventory["cpu_utilization_pct"]
+    host.memory_utilization_pct = performance_inventory["memory_utilization_pct"]
+    host.load_average_1m = performance_inventory["load_average_1m"]
+    host.root_disk_total_gb = performance_inventory["root_disk_total_gb"]
+    host.root_disk_used_gb = performance_inventory["root_disk_used_gb"]
+    host.root_disk_used_pct = performance_inventory["root_disk_used_pct"]
+    fullest_filesystem = max(
+        (
+            filesystem
+            for filesystem in filesystem_inventory
+            if filesystem["used_pct"] is not None
+        ),
+        key=lambda filesystem: float(filesystem["used_pct"]),
+        default=None,
+    )
+    host.disk_max_used_pct = fullest_filesystem["used_pct"] if fullest_filesystem else None
+    host.disk_max_mount = str(fullest_filesystem["mount_point"]) if fullest_filesystem else None
+    host.metrics_collected_at = (
+        observed_at
+        if performance_inventory["has_performance_data"] or filesystem_inventory
+        else None
+    )
     host.kernel_version = patch_inventory["kernel_version"]
     host.updates_pending = patch_inventory["updates_pending"]
     host.security_updates_pending = patch_inventory["security_updates_pending"]
     host.reboot_required = patch_inventory["reboot_required"]
     host.last_patch_at = patch_inventory["last_patch_at"]
-    host.patch_last_checked_at = datetime.now(UTC) if patch_inventory["has_patch_data"] else None
+    host.patch_last_checked_at = observed_at if patch_inventory["has_patch_data"] else None
 
     owner = first_tag_value(tags, OWNER_TAG_NAMES)
     department = first_tag_value(tags, DEPARTMENT_TAG_NAMES)
@@ -155,7 +214,12 @@ def upsert_host(
     host.zabbix_agent_availability = availability
     host.problem_count = problem_count
     host.monitoring_status = monitoring_status
-    host.zabbix_last_sync_at = datetime.now(UTC)
+    host.zabbix_last_sync_at = observed_at
+    if created:
+        db.flush()
+    sync_host_filesystems(db, host, filesystem_inventory, observed_at)
+    if before is not None:
+        record_host_changes(db, host, before, source="zabbix")
     return host, created
 
 
@@ -194,6 +258,12 @@ def refresh_zabbix_inventory(group_name: str | None = None, verbose: bool = True
 
     hostids = [str(host["hostid"]) for host in zabbix_hosts]
     items_by_host = client.get_latest_item_values_bulk(hostids, ZABBIX_DETAIL_ITEM_KEYS)
+    filesystem_items_by_host = client.get_latest_item_values_bulk_by_prefix(
+        hostids,
+        ZABBIX_FILESYSTEM_ITEM_PREFIXES,
+    )
+    for hostid, filesystem_items in filesystem_items_by_host.items():
+        items_by_host.setdefault(hostid, {}).update(filesystem_items)
     problems_by_host = client.get_current_problems_bulk(hostids)
 
     db = SessionLocal()

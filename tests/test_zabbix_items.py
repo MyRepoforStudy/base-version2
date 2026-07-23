@@ -1,9 +1,14 @@
 import unittest
 
-from app.services.zabbix_items import operating_system_item_label, patch_inventory_from_items
+from app.services.zabbix_items import (
+    filesystem_inventory_from_items,
+    operating_system_item_label,
+    patch_inventory_from_items,
+    performance_inventory_from_items,
+)
 
 
-class ZabbixPatchItemTests(unittest.TestCase):
+class ZabbixItemTests(unittest.TestCase):
     def test_extracts_patch_inventory(self):
         values = {
             "system.uname": "Linux app01 5.15.0-143-generic #153-Ubuntu SMP x86_64",
@@ -33,6 +38,28 @@ class ZabbixPatchItemTests(unittest.TestCase):
             operating_system_item_label({"system.sw.os.get": value}),
             "Ubuntu 24.04.2 LTS",
         )
+
+    def test_extracts_performance_and_root_disk_metrics(self):
+        values = {
+            "system.cpu.util[,idle]": "82.5",
+            "vm.memory.size[pused]": "71.25",
+            "system.cpu.load[all,avg1]": "1.82",
+            "vfs.fs.size[/,total]": str(100 * 1024**3),
+            "vfs.fs.size[/,used]": str(84 * 1024**3),
+            "vfs.fs.size[/var,total]": str(50 * 1024**3),
+            "vfs.fs.size[/var,used]": str(47 * 1024**3),
+        }
+        result = performance_inventory_from_items(values)
+        self.assertEqual(result["cpu_utilization_pct"], 17.5)
+        self.assertEqual(result["memory_utilization_pct"], 71.2)
+        self.assertEqual(result["load_average_1m"], 1.82)
+        self.assertEqual(result["root_disk_total_gb"], 100.0)
+        self.assertEqual(result["root_disk_used_gb"], 84.0)
+        self.assertEqual(result["root_disk_used_pct"], 84.0)
+        self.assertTrue(result["has_performance_data"])
+        filesystems = filesystem_inventory_from_items(values)
+        self.assertEqual([filesystem["mount_point"] for filesystem in filesystems], ["/", "/var"])
+        self.assertEqual(filesystems[1]["used_pct"], 94.0)
 
 
 if __name__ == "__main__":
