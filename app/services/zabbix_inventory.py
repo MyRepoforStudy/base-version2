@@ -13,16 +13,23 @@ from app.services.zabbix_items import (
     cpu_cores_from_items,
     is_virtual_platform,
     operating_system_item_label,
+    patch_inventory_from_items,
     ram_gb_from_items,
     server_model_item_label,
     server_vendor_item_label,
     uptime_seconds_from_items,
 )
+from app.services.compliance import normalize_criticality, parse_date_value, resolve_os_lifecycle
 
 ENVIRONMENT_TAG_NAMES = ("environment", "env")
 DATACENTER_TAG_NAMES = ("datacenter", "data_center", "dc")
 PROXMOX_TAG_NAMES = ("proxmox",)
 SYSTEM_TAG_NAMES = ("system",)
+OWNER_TAG_NAMES = ("owner", "technical_owner", "service_owner")
+DEPARTMENT_TAG_NAMES = ("department", "business_unit", "team")
+BUSINESS_SERVICE_TAG_NAMES = ("service", "business_service", "application")
+CRITICALITY_TAG_NAMES = ("criticality", "importance", "tier")
+OS_SUPPORT_END_TAG_NAMES = ("os_support_end", "os_eol", "os_eos")
 
 
 def normalize_tags(raw_tags: list[dict]) -> dict[str, list[str]]:
@@ -87,6 +94,9 @@ def upsert_host(
     inventory = normalize_inventory(zabbix_host.get("inventory"))
 
     os_name = operating_system_item_label(item_values, inventory.get("os_full") or inventory.get("os"))
+    os_support_end_override = parse_date_value(first_tag_value(tags, OS_SUPPORT_END_TAG_NAMES))
+    os_lifecycle = resolve_os_lifecycle(os_name, os_support_end_override)
+    patch_inventory = patch_inventory_from_items(item_values)
     vendor = server_vendor_item_label(item_values, inventory.get("vendor"))
     model = server_model_item_label(item_values, inventory.get("hardware_full") or inventory.get("hardware"))
     problem_count = len(problems)
@@ -110,12 +120,35 @@ def upsert_host(
     host.proxmox = first_tag_value(tags, PROXMOX_TAG_NAMES)
     host.system = first_tag_value(tags, SYSTEM_TAG_NAMES)
     host.os_name = os_name
+    host.os_family = os_lifecycle.family
+    host.os_version = os_lifecycle.version
+    host.os_support_end_date = os_lifecycle.support_end
+    host.os_lifecycle_source = os_lifecycle.source
     host.vendor = vendor
     host.model = model
     host.virtual = is_virtual_platform(vendor, model)
     host.cpu_cores = cpu_cores_from_items(item_values)
     host.ram_gb = ram_gb_from_items(item_values)
     host.uptime_seconds = uptime_seconds_from_items(item_values)
+    host.kernel_version = patch_inventory["kernel_version"]
+    host.updates_pending = patch_inventory["updates_pending"]
+    host.security_updates_pending = patch_inventory["security_updates_pending"]
+    host.reboot_required = patch_inventory["reboot_required"]
+    host.last_patch_at = patch_inventory["last_patch_at"]
+    host.patch_last_checked_at = datetime.now(UTC) if patch_inventory["has_patch_data"] else None
+
+    owner = first_tag_value(tags, OWNER_TAG_NAMES)
+    department = first_tag_value(tags, DEPARTMENT_TAG_NAMES)
+    business_service = first_tag_value(tags, BUSINESS_SERVICE_TAG_NAMES)
+    criticality = first_tag_value(tags, CRITICALITY_TAG_NAMES)
+    if owner:
+        host.owner = owner[:160]
+    if department:
+        host.department = department[:160]
+    if business_service:
+        host.business_service = business_service[:160]
+    if criticality or created or not host.criticality:
+        host.criticality = normalize_criticality(criticality)
     host.zabbix_hostid = hostid
     host.zabbix_host_name = display_name
     host.zabbix_url = client.build_host_url(hostid)

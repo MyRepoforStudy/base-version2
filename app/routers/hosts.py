@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models import Host
+from app.routers.common import lifecycle_status_for_host, patch_status_for_host
 from app.web import templates
 
 router = APIRouter(prefix="/hosts", tags=["hosts"])
@@ -34,5 +35,7 @@ def host_detail(host_id: int, request: Request, db: Session = Depends(get_db)):
             "active_page": "hosts",
             "host": host,
             "uptime_label": format_uptime(host.uptime_seconds),
+            "patch_status": patch_status_for_host(host),
+            "lifecycle_status": lifecycle_status_for_host(host),
         },
     )

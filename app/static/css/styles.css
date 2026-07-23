@@ -1037,6 +1037,109 @@ body {
   grid-template-columns: repeat(3, minmax(280px, 1fr));
 }
 
+.operations-summary-grid {
+  display: grid;
+  gap: 14px;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.operations-summary-card {
+  display: grid;
+  gap: 14px;
+  min-height: 132px;
+  padding: 16px;
+}
+
+.operations-summary-head {
+  align-items: center;
+  display: flex;
+  gap: 11px;
+}
+
+.operations-summary-head h2 {
+  font-size: 0.95rem;
+  font-weight: 850;
+  margin: 0;
+}
+
+.operations-summary-head small {
+  color: #667085;
+}
+
+.operations-summary-icon {
+  align-items: center;
+  border-radius: 9px;
+  color: #fff;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 1rem;
+  height: 38px;
+  justify-content: center;
+  width: 38px;
+}
+
+.operations-summary-icon.patch {
+  background: #087443;
+}
+
+.operations-summary-icon.lifecycle {
+  background: #2563eb;
+}
+
+.operations-summary-icon.ownership {
+  background: #6d5bd0;
+}
+
+.operations-status-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.status-chip {
+  background: #f2f4f7;
+  border: 1px solid #e1e6ee;
+  border-radius: 999px;
+  color: #475467;
+  font-size: 0.72rem;
+  font-weight: 750;
+  padding: 5px 8px;
+}
+
+.status-chip strong {
+  color: var(--brand-dark);
+  margin-left: 3px;
+}
+
+.status-compliant,
+.status-active {
+  background: #ecfdf3;
+  border-color: #abefc6;
+  color: #067647;
+}
+
+.status-action-required,
+.status-expiring,
+.status-medium {
+  background: #fffaeb;
+  border-color: #fedf89;
+  color: #b54708;
+}
+
+.status-eol,
+.status-critical,
+.status-high {
+  background: #fef3f2;
+  border-color: #fecdca;
+  color: #b42318;
+}
+
+.ownership-table {
+  min-width: 1180px;
+}
+
 .executive-panel {
   min-height: 140px;
 }
@@ -2185,6 +2288,7 @@ body {
   .inventory-summary-groups,
   .overview-grid,
   .executive-grid,
+  .operations-summary-grid,
   .db-size-grid,
   .db-size-3d-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2240,6 +2344,7 @@ body {
   .inventory-summary-groups,
   .overview-grid,
   .executive-grid,
+  .operations-summary-grid,
   .executive-card-grid,
   .admin-text-grid,
   .db-size-grid,

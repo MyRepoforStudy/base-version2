@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Ownership & Criticality | {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="admin-shell">
+  <header class="admin-header">
+    <div>
+      <h1>Ownership & Criticality</h1>
+      <p>Assign accountable owners, business services, departments, and operational criticality.</p>
+    </div>
+  </header>
+
+  <nav class="admin-tabs" aria-label="Admin sections">
+    <a href="/admin/support">Physical support</a>
+    <a class="active" href="/admin/ownership">Ownership & Criticality</a>
+  </nav>
+
+  {% if saved %}
+    <div class="alert alert-success py-2" role="alert">Ownership data saved.</div>
+  {% endif %}
+
+  <form method="post" action="/admin/ownership">
+    <section class="admin-panel">
+      <div class="admin-panel-head">
+        <h2>Server accountability</h2>
+        <span>{{ hosts|length }} servers</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle table-hover overview-table ownership-table">
+          <thead>
+            <tr>
+              <th>Server</th>
+              <th>Owner</th>
+              <th>Department</th>
+              <th>Business service</th>
+              <th>Criticality</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for host in hosts %}
+              <tr>
+                <td>
+                  <input type="hidden" name="host_ids" value="{{ host.id }}">
+                  <a class="table-link" href="/hosts/{{ host.id }}">{{ host.hostname|upper }}</a>
+                </td>
+                <td><input class="form-control form-control-sm" name="owner_{{ host.id }}" value="{{ host.owner or '' }}" maxlength="160"></td>
+                <td><input class="form-control form-control-sm" name="department_{{ host.id }}" value="{{ host.department or '' }}" maxlength="160"></td>
+                <td><input class="form-control form-control-sm" name="business_service_{{ host.id }}" value="{{ host.business_service or '' }}" maxlength="160"></td>
+                <td>
+                  <select class="form-select form-select-sm" name="criticality_{{ host.id }}">
+                    {% for value in criticality_options %}
+                      <option value="{{ value }}" {% if (host.criticality or 'UNKNOWN') == value %}selected{% endif %}>{{ value }}</option>
+                    {% endfor %}
+                  </select>
+                </td>
+                <td><input class="form-control form-control-sm" name="notes_{{ host.id }}" value="{{ host.notes or '' }}" maxlength="2000"></td>
+              </tr>
+            {% else %}
+              <tr><td colspan="6" class="empty-state">No servers found.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    <div class="admin-save-bar">
+      <button class="btn btn-primary" type="submit">
+        <i class="bi bi-save"></i> Save
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.models import Host
+from app.services.compliance import normalize_criticality
 from app.web import templates
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -31,6 +32,11 @@ async def parsed_form(request: Request) -> dict[str, list[str]]:
 
 def first_value(form_data: dict[str, list[str]], key: str) -> str:
     return (form_data.get(key) or [""])[0]
+
+
+def clean_text(value: str, max_length: int = 160) -> str | None:
+    cleaned = " ".join(value.split())
+    return cleaned[:max_length] if cleaned else None
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -99,3 +105,42 @@ async def admin_support_save(request: Request, db: Session = Depends(get_db)):
             host.support_end_date = None
     db.commit()
     return RedirectResponse("/admin/support?saved=1", status_code=303)
+
+
+@router.get("/ownership", response_class=HTMLResponse)
+def admin_ownership(request: Request, saved: bool = False, db: Session = Depends(get_db)):
+    if not is_admin_request(request):
+        return admin_redirect()
+    hosts = db.scalars(select(Host).order_by(Host.hostname)).all()
+    return templates.TemplateResponse(
+        request,
+        "admin_ownership.html",
+        {
+            "request": request,
+            "hosts": hosts,
+            "saved": saved,
+            "criticality_options": ("CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"),
+        },
+    )
+
+
+@router.post("/ownership")
+async def admin_ownership_save(request: Request, db: Session = Depends(get_db)):
+    if not is_admin_request(request):
+        return admin_redirect()
+    form_data = await parsed_form(request)
+    for host_id_text in form_data.get("host_ids", []):
+        try:
+            host_id = int(host_id_text)
+        except ValueError:
+            continue
+        host = db.get(Host, host_id)
+        if host is None:
+            continue
+        host.owner = clean_text(first_value(form_data, f"owner_{host_id}"))
+        host.department = clean_text(first_value(form_data, f"department_{host_id}"))
+        host.business_service = clean_text(first_value(form_data, f"business_service_{host_id}"))
+        host.criticality = normalize_criticality(first_value(form_data, f"criticality_{host_id}"))
+        host.notes = clean_text(first_value(form_data, f"notes_{host_id}"), max_length=2000)
+    db.commit()
+    return RedirectResponse("/admin/ownership?saved=1", status_code=303)

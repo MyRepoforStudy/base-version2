@@ -10,11 +10,14 @@ from app.models import Host
 from app.routers.common import (
     active_filters,
     apply_host_filters,
+    apply_operational_filters,
     apply_os_family_filter,
     apply_search_filter,
     get_filter_options,
     normalized_virtual_filter,
+    lifecycle_status_for_host,
     os_family_label,
+    patch_status_for_host,
     sort_hosts,
     support_status_label,
 )
@@ -34,13 +37,26 @@ def dashboard(
     system: str | None = None,
     os_family: str | None = None,
     q: str | None = None,
+    criticality: str | None = None,
+    patch: str | None = None,
+    lifecycle: str | None = None,
     sort: str | None = None,
     dir: str = "asc",
     refresh: bool = False,
     db: Session = Depends(get_db),
 ):
     current_view = view if view in {"overview", "hosts"} else "overview"
-    filters = active_filters(environment, virtual, proxmox, system, os_family, q)
+    filters = active_filters(
+        environment=environment,
+        virtual=virtual,
+        proxmox=proxmox,
+        system=system,
+        os_family=os_family,
+        q=q,
+        criticality=criticality,
+        patch=patch,
+        lifecycle=lifecycle,
+    )
     zabbix_refresh_error = maybe_refresh_zabbix_cache(db, force=refresh)
 
     all_hosts = db.scalars(select(Host).order_by(Host.hostname)).all()
@@ -63,6 +79,9 @@ def dashboard(
 
     monitoring_counter = Counter((host.monitoring_status or "unknown") for host in all_hosts)
     monitoring_counts = sorted(monitoring_counter.items())
+    patch_counter = Counter(patch_status_for_host(host) for host in all_hosts)
+    lifecycle_counter = Counter(lifecycle_status_for_host(host) for host in all_hosts)
+    criticality_counter = Counter((host.criticality or "UNKNOWN") for host in all_hosts)
 
     physical_server_rows = [
         {
@@ -83,10 +102,11 @@ def dashboard(
         zabbix_inventory_warning = "No cached Zabbix hosts yet. Click Refresh Zabbix to load live data."
 
     hosts_stmt = select(Host).order_by(Host.hostname)
-    hosts_stmt = apply_host_filters(hosts_stmt, environment, virtual, proxmox, system)
+    hosts_stmt = apply_host_filters(hosts_stmt, environment, virtual, proxmox, system, criticality)
     filtered_hosts = db.scalars(hosts_stmt).all()
     filtered_hosts = apply_os_family_filter(filtered_hosts, os_family)
     filtered_hosts = apply_search_filter(filtered_hosts, q)
+    filtered_hosts = apply_operational_filters(filtered_hosts, patch, lifecycle)
     sort_dir = "desc" if dir == "desc" else "asc"
     filtered_hosts = sort_hosts(filtered_hosts, sort, sort_dir)
 
@@ -120,6 +140,21 @@ def dashboard(
             "datacenter_counts": datacenter_counts,
             "os_counts": os_counts,
             "monitoring_counts": monitoring_counts,
+            "patch_counts": {
+                "compliant": patch_counter.get("compliant", 0),
+                "action_required": patch_counter.get("action-required", 0),
+                "unknown": patch_counter.get("unknown", 0),
+            },
+            "lifecycle_counts": {
+                "active": lifecycle_counter.get("active", 0),
+                "expiring": lifecycle_counter.get("expiring", 0),
+                "eol": lifecycle_counter.get("eol", 0),
+                "unknown": lifecycle_counter.get("unknown", 0),
+            },
+            "criticality_counts": {
+                label: criticality_counter.get(label, 0)
+                for label in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN")
+            },
             "physical_server_rows": physical_server_rows,
             "last_sync_at": last_sync_at,
             "zabbix_refresh_error": zabbix_refresh_error,
@@ -131,5 +166,7 @@ def dashboard(
             "sort": sort,
             "sort_dir": sort_dir,
             "chart_data": chart_data,
+            "patch_status_for_host": patch_status_for_host,
+            "lifecycle_status_for_host": lifecycle_status_for_host,
         },
     )

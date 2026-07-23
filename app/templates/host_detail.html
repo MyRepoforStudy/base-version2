@@ -36,7 +36,40 @@
       <div class="stack-row"><span>Environment</span><span>{{ host.environment }}</span></div>
       <div class="stack-row"><span>Datacenter</span><span>{{ host.datacenter }}</span></div>
       <div class="stack-row"><span>OS</span><span>{{ host.os_name or "-" }}</span></div>
-      <div class="stack-row"><span>Support end</span><span>{{ host.support_end_date or "-" }}</span></div>
+      <div class="stack-row"><span>OS family / version</span><span>{{ host.os_family or "-" }} {{ host.os_version or "" }}</span></div>
+      <div class="stack-row">
+        <span>OS lifecycle</span>
+        <span class="badge text-bg-{{ lifecycle_status|status_class }}">{{ lifecycle_status|upper }}</span>
+      </div>
+      <div class="stack-row"><span>OS support end</span><span>{{ host.os_support_end_date or "-" }}</span></div>
+      {% if not host.virtual %}
+        <div class="stack-row"><span>Hardware support end</span><span>{{ host.support_end_date or "-" }}</span></div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="content-panel">
+    <div class="panel-title"><h2>Patch Compliance</h2></div>
+    <div class="stack-list">
+      <div class="stack-row">
+        <span>Status</span>
+        <span class="badge text-bg-{{ patch_status|status_class }}">{{ patch_status|replace('-', ' ')|title }}</span>
+      </div>
+      <div class="stack-row"><span>Kernel</span><span>{{ host.kernel_version or "-" }}</span></div>
+      <div class="stack-row"><span>Updates pending</span><span>{{ host.updates_pending if host.updates_pending is not none else "-" }}</span></div>
+      <div class="stack-row"><span>Security updates</span><span>{{ host.security_updates_pending if host.security_updates_pending is not none else "-" }}</span></div>
+      <div class="stack-row"><span>Reboot required</span><span>{% if host.reboot_required is none %}-{% else %}{{ "YES" if host.reboot_required else "NO" }}{% endif %}</span></div>
+      <div class="stack-row"><span>Last patch</span><span>{{ host.last_patch_at|date_time }}</span></div>
+      <div class="stack-row"><span>Last checked</span><span>{{ host.patch_last_checked_at|date_time }}</span></div>
+    </div>
+  </div>
+  <div class="content-panel">
+    <div class="panel-title"><h2>Ownership & Criticality</h2></div>
+    <div class="stack-list">
+      <div class="stack-row"><span>Owner</span><span>{{ host.owner or "-" }}</span></div>
+      <div class="stack-row"><span>Department</span><span>{{ host.department or "-" }}</span></div>
+      <div class="stack-row"><span>Business service</span><span>{{ host.business_service or "-" }}</span></div>
+      <div class="stack-row"><span>Criticality</span><span class="badge text-bg-{{ (host.criticality or 'UNKNOWN')|status_class }}">{{ host.criticality or "UNKNOWN" }}</span></div>
+      <div class="stack-row"><span>Notes</span><span>{{ host.notes or "-" }}</span></div>
     </div>
   </div>
 </div>

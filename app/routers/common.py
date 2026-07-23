@@ -4,6 +4,11 @@ from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
 from app.models import Host
+from app.services.compliance import (
+    detect_os_family_version,
+    lifecycle_status,
+    patch_status,
+)
 
 
 def active_filters(
@@ -13,6 +18,9 @@ def active_filters(
     system: str | None = None,
     os_family: str | None = None,
     q: str | None = None,
+    criticality: str | None = None,
+    patch: str | None = None,
+    lifecycle: str | None = None,
 ) -> dict[str, str]:
     values = {
         "environment": environment,
@@ -21,6 +29,9 @@ def active_filters(
         "system": system,
         "os_family": os_family,
         "q": q,
+        "criticality": criticality,
+        "patch": patch,
+        "lifecycle": lifecycle,
     }
     return {key: value for key, value in values.items() if value}
 
@@ -35,6 +46,8 @@ def get_filter_options(db: Session) -> dict[str, list[str]]:
         "environments": distinct_values(db, Host.environment),
         "proxmox_values": distinct_values(db, Host.proxmox),
         "system_values": distinct_values(db, Host.system),
+        "criticalities": distinct_values(db, Host.criticality),
+        "owners": distinct_values(db, Host.owner),
     }
 
 
@@ -49,6 +62,7 @@ def apply_host_filters(
     virtual: str | None = None,
     proxmox: str | None = None,
     system: str | None = None,
+    criticality: str | None = None,
 ) -> Select:
     if environment:
         stmt = stmt.where(Host.environment == environment.upper())
@@ -61,34 +75,13 @@ def apply_host_filters(
         stmt = stmt.where(Host.proxmox == proxmox)
     if system:
         stmt = stmt.where(Host.system == system)
+    if criticality:
+        stmt = stmt.where(Host.criticality == criticality.upper())
     return stmt
 
 
 def os_family_label(os_name: str | None) -> str:
-    normalized = (os_name or "").strip().lower()
-    if not normalized:
-        return "Unknown"
-    if "ubuntu" in normalized:
-        return "Ubuntu"
-    if "oracle linux" in normalized or "oracle enterprise linux" in normalized:
-        return "OEL"
-    if "red hat" in normalized or "rhel" in normalized:
-        return "RHEL"
-    if "rocky" in normalized:
-        return "Rocky Linux"
-    if "alma" in normalized:
-        return "AlmaLinux"
-    if "centos" in normalized:
-        return "CentOS"
-    if "debian" in normalized:
-        return "Debian"
-    if "suse" in normalized or "sles" in normalized:
-        return "SUSE"
-    if "windows" in normalized:
-        return "Windows"
-    if "linux" in normalized:
-        return "Linux"
-    return os_name.strip()
+    return detect_os_family_version(os_name)[0]
 
 
 def apply_os_family_filter(hosts: list[Host], os_family: str | None) -> list[Host]:
@@ -116,11 +109,37 @@ def apply_search_filter(hosts: list[Host], q: str | None) -> list[Host]:
                 host.proxmox,
                 host.environment,
                 host.datacenter,
+                host.kernel_version,
+                host.owner,
+                host.department,
+                host.business_service,
+                host.criticality,
             )
             if value
         ).lower()
 
     return [host for host in hosts if query in haystack(host)]
+
+
+def patch_status_for_host(host: Host) -> str:
+    return patch_status(host.updates_pending, host.security_updates_pending, host.reboot_required)
+
+
+def lifecycle_status_for_host(host: Host) -> str:
+    return lifecycle_status(host.os_support_end_date)
+
+
+def apply_operational_filters(
+    hosts: list[Host],
+    patch: str | None = None,
+    lifecycle: str | None = None,
+) -> list[Host]:
+    selected = hosts
+    if patch:
+        selected = [host for host in selected if patch_status_for_host(host) == patch]
+    if lifecycle:
+        selected = [host for host in selected if lifecycle_status_for_host(host) == lifecycle]
+    return selected
 
 
 SORT_COLUMNS: dict[str, object] = {
@@ -136,6 +155,19 @@ SORT_COLUMNS: dict[str, object] = {
     "ram_gb": lambda host: host.ram_gb if host.ram_gb is not None else -1,
     "os_name": lambda host: (host.os_name or "").lower(),
     "monitoring_status": lambda host: host.monitoring_status or "",
+    "patch_status": lambda host: patch_status_for_host(host),
+    "updates_pending": lambda host: host.updates_pending if host.updates_pending is not None else -1,
+    "os_lifecycle": lambda host: (
+        host.os_support_end_date.toordinal() if host.os_support_end_date is not None else -1
+    ),
+    "owner": lambda host: (host.owner or "").lower(),
+    "criticality": lambda host: {
+        "CRITICAL": 4,
+        "HIGH": 3,
+        "MEDIUM": 2,
+        "LOW": 1,
+        "UNKNOWN": 0,
+    }.get(host.criticality or "UNKNOWN", 0),
 }
 
 

@@ -6,7 +6,7 @@
   {% set new_dir = 'desc' if sort == column and sort_dir == 'asc' else 'asc' %}
   <th>
     <a
-      href="/?view=hosts&environment={{ (filters.environment or '')|urlencode }}&virtual={{ (active_virtual_filter or '')|urlencode }}&os_family={{ (filters.os_family or '')|urlencode }}&proxmox={{ (filters.proxmox or '')|urlencode }}&system={{ (filters.system or '')|urlencode }}&q={{ (filters.q or '')|urlencode }}&sort={{ column }}&dir={{ new_dir }}"
+      href="/?view=hosts&environment={{ (filters.environment or '')|urlencode }}&virtual={{ (active_virtual_filter or '')|urlencode }}&os_family={{ (filters.os_family or '')|urlencode }}&proxmox={{ (filters.proxmox or '')|urlencode }}&system={{ (filters.system or '')|urlencode }}&criticality={{ (filters.criticality or '')|urlencode }}&patch={{ (filters.patch or '')|urlencode }}&lifecycle={{ (filters.lifecycle or '')|urlencode }}&q={{ (filters.q or '')|urlencode }}&sort={{ column }}&dir={{ new_dir }}"
       style="color: inherit; text-decoration: none; white-space: nowrap;"
     >
       {{ label }}
@@ -78,6 +78,34 @@
             {% endfor %}
           </select>
         </label>
+        <label>
+          Patch status
+          <select class="form-select form-select-sm" name="patch">
+            <option value="">All</option>
+            <option value="compliant" {% if filters.patch == "compliant" %}selected{% endif %}>Compliant</option>
+            <option value="action-required" {% if filters.patch == "action-required" %}selected{% endif %}>Action required</option>
+            <option value="unknown" {% if filters.patch == "unknown" %}selected{% endif %}>Unknown</option>
+          </select>
+        </label>
+        <label>
+          OS lifecycle
+          <select class="form-select form-select-sm" name="lifecycle">
+            <option value="">All</option>
+            <option value="active" {% if filters.lifecycle == "active" %}selected{% endif %}>Active</option>
+            <option value="expiring" {% if filters.lifecycle == "expiring" %}selected{% endif %}>Expiring</option>
+            <option value="eol" {% if filters.lifecycle == "eol" %}selected{% endif %}>EOL</option>
+            <option value="unknown" {% if filters.lifecycle == "unknown" %}selected{% endif %}>Unknown</option>
+          </select>
+        </label>
+        <label>
+          Criticality
+          <select class="form-select form-select-sm" name="criticality">
+            <option value="">All</option>
+            {% for value in filter_options.criticalities %}
+              <option value="{{ value }}" {% if filters.criticality == value %}selected{% endif %}>{{ value }}</option>
+            {% endfor %}
+          </select>
+        </label>
         <div class="overview-filter-actions">
           <button class="btn btn-primary btn-sm" type="submit">Apply</button>
           <a class="btn btn-outline-secondary btn-sm" href="/?view={{ current_view }}">Reset</a>
@@ -102,6 +130,9 @@
           <input type="hidden" name="proxmox" value="{{ filters.proxmox or '' }}">
           <input type="hidden" name="system" value="{{ filters.system or '' }}">
           <input type="hidden" name="os_family" value="{{ filters.os_family or '' }}">
+          <input type="hidden" name="criticality" value="{{ filters.criticality or '' }}">
+          <input type="hidden" name="patch" value="{{ filters.patch or '' }}">
+          <input type="hidden" name="lifecycle" value="{{ filters.lifecycle or '' }}">
           <input type="hidden" name="q" value="{{ filters.q or '' }}">
           <input type="hidden" name="sort" value="{{ sort or '' }}">
           <input type="hidden" name="dir" value="{{ sort_dir or '' }}">
@@ -110,7 +141,7 @@
             <i class="bi bi-arrow-repeat"></i> Refresh Zabbix
           </button>
         </form>
-        <a class="btn btn-success btn-sm" href="/exports/hosts.xlsx"><i class="bi bi-file-earmark-excel"></i> Export Servers</a>
+        <a class="btn btn-success btn-sm" href="/exports/hosts.xlsx?environment={{ (filters.environment or '')|urlencode }}&virtual={{ (active_virtual_filter or '')|urlencode }}&proxmox={{ (filters.proxmox or '')|urlencode }}&system={{ (filters.system or '')|urlencode }}&criticality={{ (filters.criticality or '')|urlencode }}&patch={{ (filters.patch or '')|urlencode }}&lifecycle={{ (filters.lifecycle or '')|urlencode }}"><i class="bi bi-file-earmark-excel"></i> Export Servers</a>
       </div>
     </header>
 
@@ -170,6 +201,46 @@
               <div><span>{{ label }}</span><strong>{{ count }}</strong></div>
             {% endfor %}
           </div>
+        </section>
+
+        <section class="operations-summary-grid">
+          <article class="overview-panel operations-summary-card">
+            <div class="operations-summary-head">
+              <span class="operations-summary-icon patch"><i class="bi bi-shield-check"></i></span>
+              <div><h2>Patch Compliance</h2><small>Zabbix package checks</small></div>
+            </div>
+            <div class="operations-status-row">
+              <span class="status-chip status-compliant">Compliant <strong>{{ patch_counts.compliant }}</strong></span>
+              <span class="status-chip status-action-required">Action <strong>{{ patch_counts.action_required }}</strong></span>
+              <span class="status-chip status-unknown">Unknown <strong>{{ patch_counts.unknown }}</strong></span>
+            </div>
+          </article>
+
+          <article class="overview-panel operations-summary-card">
+            <div class="operations-summary-head">
+              <span class="operations-summary-icon lifecycle"><i class="bi bi-calendar2-check"></i></span>
+              <div><h2>OS Lifecycle</h2><small>Standard / Premier support</small></div>
+            </div>
+            <div class="operations-status-row">
+              <span class="status-chip status-active">Active <strong>{{ lifecycle_counts.active }}</strong></span>
+              <span class="status-chip status-expiring">Expiring <strong>{{ lifecycle_counts.expiring }}</strong></span>
+              <span class="status-chip status-eol">EOL <strong>{{ lifecycle_counts.eol }}</strong></span>
+              <span class="status-chip status-unknown">Unknown <strong>{{ lifecycle_counts.unknown }}</strong></span>
+            </div>
+          </article>
+
+          <article class="overview-panel operations-summary-card">
+            <div class="operations-summary-head">
+              <span class="operations-summary-icon ownership"><i class="bi bi-person-badge"></i></span>
+              <div><h2>Criticality</h2><small>Business ownership</small></div>
+            </div>
+            <div class="operations-status-row">
+              <span class="status-chip status-critical">Critical <strong>{{ criticality_counts['CRITICAL'] }}</strong></span>
+              <span class="status-chip status-high">High <strong>{{ criticality_counts['HIGH'] }}</strong></span>
+              <span class="status-chip status-medium">Medium <strong>{{ criticality_counts['MEDIUM'] }}</strong></span>
+              <span class="status-chip status-unknown">Unknown <strong>{{ criticality_counts['UNKNOWN'] }}</strong></span>
+            </div>
+          </article>
         </section>
 
         <section class="overview-panel executive-panel summary-support-panel">
@@ -277,6 +348,11 @@
                 {{ sort_th('cpu_cores', 'CPU') }}
                 {{ sort_th('ram_gb', 'RAM') }}
                 {{ sort_th('os_name', 'Operating system') }}
+                {{ sort_th('patch_status', 'Patch') }}
+                {{ sort_th('updates_pending', 'Updates') }}
+                {{ sort_th('os_lifecycle', 'OS lifecycle') }}
+                {{ sort_th('owner', 'Owner') }}
+                {{ sort_th('criticality', 'Criticality') }}
                 {{ sort_th('monitoring_status', 'Monitoring') }}
               </tr>
             </thead>
@@ -294,10 +370,25 @@
                   <td>{{ host.cpu_cores or "-" }}</td>
                   <td>{{ (host.ram_gb ~ " GB") if host.ram_gb else "-" }}</td>
                   <td>{{ host.os_name or "-" }}</td>
+                  {% set patch_status = patch_status_for_host(host) %}
+                  {% set lifecycle_status = lifecycle_status_for_host(host) %}
+                  <td><span class="badge text-bg-{{ patch_status|status_class }}">{{ patch_status|replace('-', ' ')|title }}</span></td>
+                  <td>
+                    {% if host.updates_pending is not none %}
+                      {{ host.updates_pending }}
+                      {% if host.security_updates_pending %}<span class="text-danger">({{ host.security_updates_pending }} security)</span>{% endif %}
+                    {% else %}-{% endif %}
+                  </td>
+                  <td>
+                    <span class="badge text-bg-{{ lifecycle_status|status_class }}">{{ lifecycle_status|upper }}</span>
+                    {% if host.os_support_end_date %}<small class="d-block text-muted">{{ host.os_support_end_date }}</small>{% endif %}
+                  </td>
+                  <td>{{ host.owner or "-" }}</td>
+                  <td><span class="badge text-bg-{{ (host.criticality or 'UNKNOWN')|status_class }}">{{ host.criticality or "UNKNOWN" }}</span></td>
                   <td><span class="badge text-bg-{{ host.monitoring_status|status_class }}">{{ host.monitoring_status }}</span></td>
                 </tr>
               {% else %}
-                <tr><td colspan="12" class="empty-state">No servers found.</td></tr>
+                <tr><td colspan="17" class="empty-state">No servers found.</td></tr>
               {% endfor %}
             </tbody>
           </table>

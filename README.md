@@ -74,8 +74,43 @@ uvicorn app.main:app --reload
 - `/?view=hosts` — список серверов с фильтрами
 - `/hosts/{id}` — детали сервера
 - `/admin/support` — редактирование support end date (нужен логин)
+- `/admin/ownership` — владельцы, сервисы и criticality (нужен логин)
 - `/exports/hosts.xlsx` — экспорт в Excel
 
 ## Модель данных
 
-`hosts`: сервер + живые поля Zabbix (`zabbix_hostid`, `zabbix_host_name`, `zabbix_url`, `zabbix_agent_availability`, `monitoring_status`, `problem_count`, `zabbix_last_sync_at`, `os_name`, `cpu_cores`, `ram_gb`, `uptime_seconds`, `vendor`, `model`, `virtual`) + единственное ручное поле `support_end_date`.
+`hosts`: сервер + живые поля Zabbix (`zabbix_hostid`, `zabbix_host_name`, `zabbix_url`, `zabbix_agent_availability`, `monitoring_status`, `problem_count`, `zabbix_last_sync_at`, `os_name`, `cpu_cores`, `ram_gb`, `uptime_seconds`, `vendor`, `model`, `virtual`) + ручные поля поддержки и ответственности.
+
+## Patch Compliance, OS Lifecycle и ответственные
+
+Портал читает patch-данные из любого из совместимых Zabbix item keys:
+
+- kernel: `system.kernel.version`, `kernel.version` или `system.uname`;
+- ожидающие обновления: `linux.updates.pending`, `system.updates.pending`,
+  `system.sw.updates.count`, `package.updates.pending`,
+  `apt.updates.pending` или `dnf.updates.pending`;
+- security updates: те же семейства ключей с окончанием `.security`;
+- необходимость перезагрузки: `linux.reboot.required`,
+  `system.reboot.required` или `reboot.required`;
+- последний успешный patch: `linux.patch.last`, `system.patch.last` или
+  `patch.last.success` в ISO-8601/Unix timestamp.
+
+Если patch items отсутствуют, статус намеренно отображается как `Unknown`.
+`Compliant` присваивается только при нулевых счётчиках и отсутствии требования
+перезагрузки.
+
+Ответственные читаются из Zabbix host tags:
+
+- owner: `owner`, `technical_owner`, `service_owner`;
+- department: `department`, `business_unit`, `team`;
+- business service: `service`, `business_service`, `application`;
+- criticality: `criticality`, `importance`, `tier`.
+
+Criticality поддерживает `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, а также `P1`–`P4`
+и `tier-0`–`tier-3`. Администратор может заполнить или исправить значения на
+`/admin/ownership`. Непустой tag Zabbix снова станет источником истины при
+следующей синхронизации.
+
+Семейство ОС, версия и окончание Standard/Premier support определяются по
+названию ОС. Для купленной расширенной поддержки задайте host tag
+`os_support_end`, `os_eol` или `os_eos` с ISO-датой, например `2032-05-31`.
