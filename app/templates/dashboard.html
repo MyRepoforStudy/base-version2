@@ -14,49 +14,64 @@
       <a class="overview-nav-item {% if current_view == 'hosts' %}active{% endif %}" href="/?view=hosts">Servers</a>
     </div>
 
-    <form class="overview-filters" action="/" method="get">
-      <input type="hidden" name="view" value="{{ current_view }}">
-      <div class="sidebar-caption">Filters</div>
-      <label>
-        Environment
-        <select class="form-select form-select-sm" name="environment">
-          <option value="">All</option>
-          {% for value in filter_options.environments %}
-            <option value="{{ value }}" {% if filters.environment == value %}selected{% endif %}>{{ value }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <label>
-        Virtual
-        <select class="form-select form-select-sm" name="virtual">
-          <option value="">All</option>
-          <option value="YES" {% if active_virtual_filter == "YES" %}selected{% endif %}>Virtual</option>
-          <option value="NO" {% if active_virtual_filter == "NO" %}selected{% endif %}>Physical</option>
-        </select>
-      </label>
-      <label>
-        Proxmox
-        <select class="form-select form-select-sm" name="proxmox">
-          <option value="">All</option>
-          {% for value in filter_options.proxmox_values %}
-            <option value="{{ value }}" {% if filters.proxmox == value %}selected{% endif %}>{{ value }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <label>
-        System
-        <select class="form-select form-select-sm" name="system">
-          <option value="">All</option>
-          {% for value in filter_options.system_values %}
-            <option value="{{ value }}" {% if filters.system == value %}selected{% endif %}>{{ value }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <div class="overview-filter-actions">
-        <button class="btn btn-primary btn-sm" type="submit">Apply</button>
-        <a class="btn btn-outline-secondary btn-sm" href="/?view={{ current_view }}">Reset</a>
-      </div>
-    </form>
+    {% if current_view == "hosts" %}
+      <form class="overview-filters" action="/" method="get">
+        <input type="hidden" name="view" value="{{ current_view }}">
+        <div class="sidebar-caption">Filters</div>
+        <label>
+          Search
+          <input class="form-control form-control-sm" type="text" name="q" value="{{ filters.q or '' }}" placeholder="hostname, IP, vendor...">
+        </label>
+        <label>
+          Environment
+          <select class="form-select form-select-sm" name="environment">
+            <option value="">All</option>
+            {% for value in filter_options.environments %}
+              <option value="{{ value }}" {% if filters.environment == value %}selected{% endif %}>{{ value }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          Virtual
+          <select class="form-select form-select-sm" name="virtual">
+            <option value="">All</option>
+            <option value="YES" {% if active_virtual_filter == "YES" %}selected{% endif %}>Virtual</option>
+            <option value="NO" {% if active_virtual_filter == "NO" %}selected{% endif %}>Physical</option>
+          </select>
+        </label>
+        <label>
+          Operating system
+          <select class="form-select form-select-sm" name="os_family">
+            <option value="">All</option>
+            {% for value in filter_options.os_families %}
+              <option value="{{ value }}" {% if filters.os_family == value %}selected{% endif %}>{{ value }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          Proxmox
+          <select class="form-select form-select-sm" name="proxmox">
+            <option value="">All</option>
+            {% for value in filter_options.proxmox_values %}
+              <option value="{{ value }}" {% if filters.proxmox == value %}selected{% endif %}>{{ value }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          System
+          <select class="form-select form-select-sm" name="system">
+            <option value="">All</option>
+            {% for value in filter_options.system_values %}
+              <option value="{{ value }}" {% if filters.system == value %}selected{% endif %}>{{ value }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <div class="overview-filter-actions">
+          <button class="btn btn-primary btn-sm" type="submit">Apply</button>
+          <a class="btn btn-outline-secondary btn-sm" href="/?view={{ current_view }}">Reset</a>
+        </div>
+      </form>
+    {% endif %}
   </aside>
 
   <section class="overview-main">
@@ -74,6 +89,8 @@
           <input type="hidden" name="virtual" value="{{ active_virtual_filter or '' }}">
           <input type="hidden" name="proxmox" value="{{ filters.proxmox or '' }}">
           <input type="hidden" name="system" value="{{ filters.system or '' }}">
+          <input type="hidden" name="os_family" value="{{ filters.os_family or '' }}">
+          <input type="hidden" name="q" value="{{ filters.q or '' }}">
           <input type="hidden" name="refresh" value="1">
           <button class="btn btn-outline-secondary btn-sm" type="submit">
             <i class="bi bi-arrow-repeat"></i> Refresh Zabbix

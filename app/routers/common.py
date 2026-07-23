@@ -11,8 +11,17 @@ def active_filters(
     virtual: str | None = None,
     proxmox: str | None = None,
     system: str | None = None,
+    os_family: str | None = None,
+    q: str | None = None,
 ) -> dict[str, str]:
-    values = {"environment": environment, "virtual": virtual, "proxmox": proxmox, "system": system}
+    values = {
+        "environment": environment,
+        "virtual": virtual,
+        "proxmox": proxmox,
+        "system": system,
+        "os_family": os_family,
+        "q": q,
+    }
     return {key: value for key, value in values.items() if value}
 
 
@@ -53,6 +62,65 @@ def apply_host_filters(
     if system:
         stmt = stmt.where(Host.system == system)
     return stmt
+
+
+def os_family_label(os_name: str | None) -> str:
+    normalized = (os_name or "").strip().lower()
+    if not normalized:
+        return "Unknown"
+    if "ubuntu" in normalized:
+        return "Ubuntu"
+    if "oracle linux" in normalized or "oracle enterprise linux" in normalized:
+        return "OEL"
+    if "red hat" in normalized or "rhel" in normalized:
+        return "RHEL"
+    if "rocky" in normalized:
+        return "Rocky Linux"
+    if "alma" in normalized:
+        return "AlmaLinux"
+    if "centos" in normalized:
+        return "CentOS"
+    if "debian" in normalized:
+        return "Debian"
+    if "suse" in normalized or "sles" in normalized:
+        return "SUSE"
+    if "windows" in normalized:
+        return "Windows"
+    if "linux" in normalized:
+        return "Linux"
+    return os_name.strip()
+
+
+def apply_os_family_filter(hosts: list[Host], os_family: str | None) -> list[Host]:
+    if not os_family:
+        return hosts
+    return [host for host in hosts if os_family_label(host.os_name) == os_family]
+
+
+def apply_search_filter(hosts: list[Host], q: str | None) -> list[Host]:
+    query = (q or "").strip().lower()
+    if not query:
+        return hosts
+
+    def haystack(host: Host) -> str:
+        return " ".join(
+            str(value)
+            for value in (
+                host.hostname,
+                host.zabbix_host_name,
+                host.ip_address,
+                host.vendor,
+                host.model,
+                host.os_name,
+                host.system,
+                host.proxmox,
+                host.environment,
+                host.datacenter,
+            )
+            if value
+        ).lower()
+
+    return [host for host in hosts if query in haystack(host)]
 
 
 def support_status_label(support_end_date: date | None) -> str:

@@ -10,41 +10,17 @@ from app.models import Host
 from app.routers.common import (
     active_filters,
     apply_host_filters,
+    apply_os_family_filter,
+    apply_search_filter,
     get_filter_options,
     normalized_virtual_filter,
+    os_family_label,
     support_status_label,
 )
 from app.services.zabbix_refresh import maybe_refresh_zabbix_cache
 from app.web import templates
 
 router = APIRouter()
-
-
-def os_family_label(os_name: str | None) -> str:
-    normalized = (os_name or "").strip().lower()
-    if not normalized:
-        return "Unknown"
-    if "ubuntu" in normalized:
-        return "Ubuntu"
-    if "oracle linux" in normalized or "oracle enterprise linux" in normalized:
-        return "OEL"
-    if "red hat" in normalized or "rhel" in normalized:
-        return "RHEL"
-    if "rocky" in normalized:
-        return "Rocky Linux"
-    if "alma" in normalized:
-        return "AlmaLinux"
-    if "centos" in normalized:
-        return "CentOS"
-    if "debian" in normalized:
-        return "Debian"
-    if "suse" in normalized or "sles" in normalized:
-        return "SUSE"
-    if "windows" in normalized:
-        return "Windows"
-    if "linux" in normalized:
-        return "Linux"
-    return os_name.strip()
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -55,11 +31,13 @@ def dashboard(
     virtual: str | None = None,
     proxmox: str | None = None,
     system: str | None = None,
+    os_family: str | None = None,
+    q: str | None = None,
     refresh: bool = False,
     db: Session = Depends(get_db),
 ):
     current_view = view if view in {"overview", "hosts"} else "overview"
-    filters = active_filters(environment, virtual, proxmox, system)
+    filters = active_filters(environment, virtual, proxmox, system, os_family, q)
     zabbix_refresh_error = maybe_refresh_zabbix_cache(db, force=refresh)
 
     all_hosts = db.scalars(select(Host).order_by(Host.hostname)).all()
@@ -104,6 +82,10 @@ def dashboard(
     hosts_stmt = select(Host).order_by(Host.hostname)
     hosts_stmt = apply_host_filters(hosts_stmt, environment, virtual, proxmox, system)
     filtered_hosts = db.scalars(hosts_stmt).all()
+    filtered_hosts = apply_os_family_filter(filtered_hosts, os_family)
+    filtered_hosts = apply_search_filter(filtered_hosts, q)
+
+    os_family_options = sorted({os_family_label(host.os_name) for host in all_hosts})
 
     chart_data = {
         "platformLabels": ["Virtual", "Physical"],
@@ -115,6 +97,9 @@ def dashboard(
         "monitoringLabels": [label for label, _ in monitoring_counts],
         "monitoringValues": [count for _, count in monitoring_counts],
     }
+
+    filter_options = get_filter_options(db)
+    filter_options["os_families"] = os_family_options
 
     return templates.TemplateResponse(
         request,
@@ -136,7 +121,7 @@ def dashboard(
             "zabbix_inventory_warning": zabbix_inventory_warning,
             "hosts": filtered_hosts,
             "filters": filters,
-            "filter_options": get_filter_options(db),
+            "filter_options": filter_options,
             "active_virtual_filter": normalized_virtual_filter(virtual),
             "chart_data": chart_data,
         },
