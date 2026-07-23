@@ -24,6 +24,11 @@ from app.services.zabbix_items import (
 )
 from app.services.change_history import host_change_snapshot, record_host_changes
 from app.services.compliance import normalize_criticality, parse_date_value, resolve_os_lifecycle
+from app.services.metric_history import (
+    latest_metric_snapshots,
+    prune_metric_history,
+    record_metric_snapshot,
+)
 
 ENVIRONMENT_TAG_NAMES = ("environment", "env")
 DATACENTER_TAG_NAMES = ("datacenter", "data_center", "dc")
@@ -272,6 +277,7 @@ def refresh_zabbix_inventory(group_name: str | None = None, verbose: bool = True
     deleted = 0
     seen_hostids: set[str] = set()
     try:
+        latest_snapshots = latest_metric_snapshots(db)
         for zabbix_host in zabbix_hosts:
             hostid = str(zabbix_host["hostid"])
             if hostid in seen_hostids:
@@ -284,6 +290,14 @@ def refresh_zabbix_inventory(group_name: str | None = None, verbose: bool = True
                 problems_by_host.get(hostid, []),
                 client,
             )
+            snapshot = record_metric_snapshot(
+                db,
+                host,
+                latest_snapshots.get(host.id),
+                settings.metric_history_interval_seconds,
+            )
+            if snapshot is not None:
+                latest_snapshots[host.id] = snapshot
             if was_created:
                 created += 1
                 action = "created"
@@ -296,6 +310,7 @@ def refresh_zabbix_inventory(group_name: str | None = None, verbose: bool = True
                     f"status={host.monitoring_status} problems={host.problem_count}"
                 )
         deleted = prune_stale_zabbix_hosts(db, seen_hostids, verbose=verbose)
+        prune_metric_history(db, settings.metric_history_retention_days)
         db.commit()
     except Exception:
         db.rollback()

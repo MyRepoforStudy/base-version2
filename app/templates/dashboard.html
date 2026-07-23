@@ -27,9 +27,10 @@
       <a class="overview-nav-item {% if current_view == 'overview' %}active{% endif %}" href="/?view=overview">Overview</a>
       <a class="overview-nav-item {% if current_view == 'hosts' %}active{% endif %}" href="/?view=hosts">Servers</a>
       <a class="overview-nav-item {% if current_view == 'performance' %}active{% endif %}" href="/?view=performance">Performance</a>
+      <a class="overview-nav-item {% if current_view == 'capacity' %}active{% endif %}" href="/?view=capacity">Capacity & SLA</a>
     </div>
 
-    {% if current_view in ["hosts", "performance"] %}
+    {% if current_view in ["hosts", "performance", "capacity"] %}
       <form id="serverFilters" class="overview-filters" action="/" method="get">
         <input type="hidden" name="view" value="{{ current_view }}">
         <input type="hidden" name="sort" value="{{ sort or '' }}">
@@ -117,6 +118,8 @@
               SUMMARY OVERVIEW
             {% elif current_view == 'performance' %}
               PERFORMANCE OVERVIEW
+            {% elif current_view == 'capacity' %}
+              CAPACITY & SLA
             {% else %}
               SERVERS OVERVIEW
             {% endif %}
@@ -345,7 +348,7 @@
           </table>
         </div>
       </section>
-    {% else %}
+    {% elif current_view == "performance" %}
       <section class="overview-panel">
         <div class="overview-section-heading">
           <h2>Performance Health</h2>
@@ -414,6 +417,112 @@
             </tbody>
           </table>
         </div>
+      </section>
+    {% else %}
+      <div class="capacity-summary-grid">
+        <section class="capacity-summary-card">
+          <span>Servers analysed</span>
+          <strong>{{ capacity_rows|length }}</strong>
+          <small>Rolling 30-day window</small>
+        </section>
+        <section class="capacity-summary-card">
+          <span>Capacity at risk</span>
+          <strong class="text-danger">{{ capacity_at_risk_count }}</strong>
+          <small>Forecast within 30 days</small>
+        </section>
+        <section class="capacity-summary-card">
+          <span>SLA missed</span>
+          <strong class="text-danger">{{ sla_missed_count }}</strong>
+          <small>Target {{ sla_target_percent }}%</small>
+        </section>
+        <section class="capacity-summary-card">
+          <span>Collecting history</span>
+          <strong>{{ history_collecting_count }}</strong>
+          <small>History starts after deployment</small>
+        </section>
+      </div>
+      <section class="overview-panel">
+        <div class="overview-section-heading">
+          <h2>Capacity Forecast & Availability</h2>
+          <div class="d-flex align-items-center gap-2">
+            <input
+              class="form-control form-control-sm"
+              type="search"
+              name="q"
+              form="serverFilters"
+              value="{{ filters.q or '' }}"
+              placeholder="Search hostname, IP, system..."
+              style="min-width: 220px;"
+            >
+            <button class="btn btn-primary btn-sm" type="submit" form="serverFilters"><i class="bi bi-search"></i></button>
+          </div>
+          <span>Disk target {{ capacity_forecast_target_percent }}%</span>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle table-hover overview-table capacity-sla-table">
+            <thead>
+              <tr>
+                {{ sort_th('hostname', 'Server') }}
+                {{ sort_th('ip_address', 'IP') }}
+                {{ sort_th('environment', 'Environment') }}
+                <th>Filesystem</th>
+                <th>Current</th>
+                <th>Growth / day</th>
+                <th>Forecast</th>
+                <th>Days left</th>
+                <th>Availability 30d</th>
+                <th>SLA</th>
+                <th>Coverage</th>
+                <th>Samples</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in capacity_rows %}
+                {% set host = row.host %}
+                {% set forecast = row.forecast %}
+                {% set sla = row.sla %}
+                <tr>
+                  <td><a class="table-link" href="/hosts/{{ host.id }}">{{ host.zabbix_host_name or host.hostname }}</a></td>
+                  <td>{{ host.ip_address or "-" }}</td>
+                  <td><span class="pill env-pill env-{{ (host.environment or 'unknown')|lower }}">{{ host.environment }}</span></td>
+                  <td>{{ forecast.mount_point or "-" }}</td>
+                  <td>
+                    <span class="badge text-bg-{{ forecast.status|status_class }}">
+                      {{ (forecast.current_pct ~ "%") if forecast.current_pct is not none else "-" }}
+                    </span>
+                  </td>
+                  <td>
+                    {% if forecast.daily_growth_pct is not none %}
+                      {{ "+" if forecast.daily_growth_pct > 0 else "" }}{{ forecast.daily_growth_pct }}% / day
+                    {% else %}
+                      -
+                    {% endif %}
+                  </td>
+                  <td>
+                    <span class="badge text-bg-{{ forecast.status|status_class }}">{{ forecast.status|title }}</span>
+                    {% if forecast.forecast_at %}<small class="d-block text-muted mt-1">{{ forecast.forecast_at|date_time }}</small>{% endif %}
+                  </td>
+                  <td>{{ forecast.days_remaining if forecast.days_remaining is not none else "-" }}</td>
+                  <td>{{ (sla.availability_pct ~ "%") if sla.availability_pct is not none else "-" }}</td>
+                  <td>
+                    <span class="badge text-bg-{{ sla.status|status_class }}">{{ sla.status|title }}</span>
+                    <small class="d-block text-muted mt-1">Target {{ sla_target_percent }}%</small>
+                  </td>
+                  <td>{{ sla.coverage_pct }}%</td>
+                  <td>
+                    {{ sla.sample_count }}
+                    <small class="d-block text-muted">{{ forecast.sample_count }} capacity</small>
+                  </td>
+                </tr>
+              {% else %}
+                <tr><td colspan="12" class="empty-state">No servers found.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="capacity-note">
+          Forecast requires at least 6 disk samples spanning 24 hours. SLA becomes final when 95% of the 30-day window is covered.
+        </p>
       </section>
     {% endif %}
   </section>

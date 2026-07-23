@@ -2258,6 +2258,50 @@ body {
   min-width: 1180px;
 }
 
+.capacity-summary-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 14px;
+}
+
+.capacity-summary-card {
+  background: #fff;
+  border: 1px solid #dfe4ec;
+  border-radius: 10px;
+  display: grid;
+  gap: 3px;
+  padding: 14px;
+}
+
+.capacity-summary-card span {
+  color: #667085;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.capacity-summary-card strong {
+  color: #111827;
+  font-size: 1.55rem;
+  line-height: 1.2;
+}
+
+.capacity-summary-card small,
+.capacity-note {
+  color: #667085;
+  font-size: 0.72rem;
+}
+
+.capacity-sla-table {
+  min-width: 1380px;
+}
+
+.capacity-note {
+  margin: 10px 0 0;
+  text-align: right;
+}
+
 @media (max-width: 992px) {
   .metric-grid {
     grid-template-columns: 1fr;
@@ -2278,6 +2322,7 @@ body {
   }
 
   .overview-kpis,
+  .capacity-summary-grid,
   .inventory-summary-groups,
   .overview-grid,
   .executive-grid,
@@ -2333,6 +2378,7 @@ body {
   .overview-sidebar,
   .overview-filters,
   .overview-kpis,
+  .capacity-summary-grid,
   .inventory-summary-groups,
   .overview-grid,
   .executive-grid,

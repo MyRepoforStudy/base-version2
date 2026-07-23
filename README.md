@@ -73,6 +73,7 @@ uvicorn app.main:app --reload
 - `/?view=overview` — Overview
 - `/?view=hosts` — инвентарный список серверов с фильтрами
 - `/?view=performance` — CPU, RAM, filesystem capacity, uptime и Health Score
+- `/?view=capacity` — прогноз заполнения дисков, Availability и SLA за 30 дней
 - `/hosts/{id}` — детали сервера
 - `/admin/support` — редактирование support end date (нужен логин)
 - `/admin/ownership` — владельцы, сервисы и criticality (нужен логин)
@@ -109,6 +110,25 @@ Change History начинает накапливаться после устан
 изменения инвентаря при синхронизации Zabbix и ручные изменения на страницах
 администрирования. Быстро меняющиеся показатели CPU, RAM, disk и uptime в журнал
 не записываются.
+
+### Capacity Forecast и Availability SLA
+
+При синхронизации Zabbix портал сохраняет исторический снимок раз в час и сразу
+при изменении статуса мониторинга. Повторяющиеся данные хранятся 90 дней.
+В Docker-контейнере фоновая синхронизация запускается каждые 5 минут независимо
+от посещения портала; интервал задаётся через `ZABBIX_COLLECT_INTERVAL_SECONDS`.
+
+- Capacity Forecast использует линейный тренд самого заполненного filesystem и
+  прогнозирует дату достижения порога 95%. Для расчёта нужно минимум 6 точек за
+  период не менее 24 часов.
+- Availability рассчитывается по времени состояний `ok`/`problem` относительно
+  всех подтверждённых интервалов за 30 дней.
+- SLA по умолчанию равен 99.9%. Пока история не покрывает 95% расчётного окна,
+  результат помечается как `Collecting`.
+
+Интервал, retention, SLA и порог capacity настраиваются переменными
+`METRIC_HISTORY_INTERVAL_SECONDS`, `METRIC_HISTORY_RETENTION_DAYS`,
+`SLA_TARGET_PERCENT` и `CAPACITY_FORECAST_TARGET_PERCENT`.
 
 Ответственные читаются из Zabbix host tags:
 

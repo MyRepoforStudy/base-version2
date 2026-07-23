@@ -11,11 +11,34 @@ templates = Jinja2Templates(directory=settings.templates_dir)
 
 def status_class(value: str | None) -> str:
     normalized = (value or "unknown").lower()
-    if normalized in {"ok", "available", "compliant", "active", "low", "healthy"}:
+    if normalized in {
+        "ok",
+        "available",
+        "compliant",
+        "active",
+        "low",
+        "healthy",
+        "stable",
+        "met",
+    }:
         return "success"
-    if normalized in {"problem", "warning", "action-required", "expiring", "medium"}:
+    if normalized in {
+        "problem",
+        "warning",
+        "watch",
+        "action-required",
+        "expiring",
+        "medium",
+    }:
         return "warning"
-    if normalized in {"down", "unavailable", "eol", "critical", "high"}:
+    if normalized in {
+        "down",
+        "unavailable",
+        "eol",
+        "critical",
+        "high",
+        "missed",
+    }:
         return "danger"
     if normalized in {"disabled"}:
         return "info"

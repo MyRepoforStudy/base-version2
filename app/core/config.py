@@ -28,6 +28,16 @@ def env_int(name: str, default: int) -> int:
         return default
 
 
+def env_float(name: str, default: float) -> float:
+    value = getenv(name)
+    if value is None:
+        return default
+    try:
+        return float(value.strip())
+    except ValueError:
+        return default
+
+
 class Settings:
     app_name: str = getenv("APP_NAME", "Linux Server Inventory")
     app_env: str = getenv("APP_ENV", "local")
@@ -47,6 +57,13 @@ class Settings:
     zabbix_ca_file: str | None = getenv("ZABBIX_CA_FILE")
     zabbix_host_group: str = getenv("ZABBIX_HOST_GROUP", "Linux servers")
     zabbix_auto_refresh_seconds: int = env_int("ZABBIX_AUTO_REFRESH_SECONDS", 300)
+    metric_history_interval_seconds: int = env_int("METRIC_HISTORY_INTERVAL_SECONDS", 3600)
+    metric_history_retention_days: int = env_int("METRIC_HISTORY_RETENTION_DAYS", 90)
+    sla_target_percent: float = env_float("SLA_TARGET_PERCENT", 99.9)
+    capacity_forecast_target_percent: float = env_float(
+        "CAPACITY_FORECAST_TARGET_PERCENT",
+        95.0,
+    )
 
 
 @lru_cache

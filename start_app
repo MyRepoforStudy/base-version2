@@ -1,0 +1,22 @@
+#!/usr/bin/env sh
+set -e
+
+alembic upgrade head
+
+collect_interval="${ZABBIX_COLLECT_INTERVAL_SECONDS:-300}"
+case "$collect_interval" in
+  ""|*[!0-9]*) collect_interval=300 ;;
+esac
+
+if [ -n "${ZABBIX_URL:-}" ] &&
+   [ -n "${ZABBIX_API_TOKEN:-}" ] &&
+   [ "$collect_interval" -gt 0 ]; then
+  (
+    while true; do
+      ./sync_zabbix || echo "Background Zabbix sync failed; retrying in ${collect_interval}s"
+      sleep "$collect_interval"
+    done
+  ) &
+fi
+
+exec uvicorn app.main:app --host 0.0.0.0 --port 8000

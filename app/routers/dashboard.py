@@ -1,4 +1,5 @@
 from collections import Counter
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
@@ -6,7 +7,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.models import Host
+from app.core.config import get_settings
+from app.models import Host, HostMetricSnapshot
 from app.routers.common import (
     active_filters,
     apply_host_filters,
@@ -24,6 +26,7 @@ from app.routers.common import (
     support_status_label,
 )
 from app.services.host_health import disk_capacity_status, utilization_status
+from app.services.capacity_sla import availability_sla, capacity_forecast
 from app.services.zabbix_refresh import maybe_refresh_zabbix_cache
 from app.web import templates
 
@@ -47,7 +50,11 @@ def dashboard(
     refresh: bool = False,
     db: Session = Depends(get_db),
 ):
-    current_view = view if view in {"overview", "hosts", "performance"} else "overview"
+    current_view = (
+        view
+        if view in {"overview", "hosts", "performance", "capacity"}
+        else "overview"
+    )
     if current_view == "hosts" and sort in {
         "cpu_utilization_pct",
         "memory_utilization_pct",
@@ -119,6 +126,64 @@ def dashboard(
     sort_dir = "desc" if dir == "desc" else "asc"
     filtered_hosts = sort_hosts(filtered_hosts, sort, sort_dir)
 
+    capacity_rows = []
+    capacity_at_risk_count = 0
+    sla_missed_count = 0
+    history_collecting_count = 0
+    settings = get_settings()
+    if current_view == "capacity" and filtered_hosts:
+        now = datetime.now(UTC)
+        snapshot_cutoff = now - timedelta(days=30, hours=2)
+        host_ids = [host.id for host in filtered_hosts]
+        snapshots = db.scalars(
+            select(HostMetricSnapshot)
+            .where(
+                HostMetricSnapshot.host_id.in_(host_ids),
+                HostMetricSnapshot.observed_at >= snapshot_cutoff,
+            )
+            .order_by(
+                HostMetricSnapshot.host_id,
+                HostMetricSnapshot.observed_at,
+            )
+        ).all()
+        snapshots_by_host: dict[int, list[HostMetricSnapshot]] = {
+            host_id: [] for host_id in host_ids
+        }
+        for snapshot in snapshots:
+            snapshots_by_host.setdefault(snapshot.host_id, []).append(snapshot)
+        for host in filtered_hosts:
+            host_snapshots = snapshots_by_host.get(host.id, [])
+            forecast = capacity_forecast(
+                host_snapshots,
+                current_pct=host.disk_max_used_pct,
+                mount_point=host.disk_max_mount,
+                target_pct=settings.capacity_forecast_target_percent,
+                now=now,
+            )
+            sla = availability_sla(
+                host_snapshots,
+                target_percent=settings.sla_target_percent,
+                window_days=30,
+                max_gap_seconds=max(
+                    settings.metric_history_interval_seconds * 2,
+                    7200,
+                ),
+                now=now,
+            )
+            capacity_rows.append(
+                {
+                    "host": host,
+                    "forecast": forecast,
+                    "sla": sla,
+                }
+            )
+            if forecast.status in {"critical", "warning"}:
+                capacity_at_risk_count += 1
+            if sla.status == "missed":
+                sla_missed_count += 1
+            if forecast.status == "collecting" or sla.status == "collecting":
+                history_collecting_count += 1
+
     os_family_options = sorted({os_family_label(host.os_name) for host in all_hosts})
 
     chart_data = {
@@ -154,6 +219,12 @@ def dashboard(
             "zabbix_refresh_error": zabbix_refresh_error,
             "zabbix_inventory_warning": zabbix_inventory_warning,
             "hosts": filtered_hosts,
+            "capacity_rows": capacity_rows,
+            "capacity_at_risk_count": capacity_at_risk_count,
+            "sla_missed_count": sla_missed_count,
+            "history_collecting_count": history_collecting_count,
+            "sla_target_percent": settings.sla_target_percent,
+            "capacity_forecast_target_percent": settings.capacity_forecast_target_percent,
             "filters": filters,
             "filter_options": filter_options,
             "active_virtual_filter": normalized_virtual_filter(virtual),
