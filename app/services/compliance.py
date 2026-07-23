@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 
 @dataclass(frozen=True)
@@ -107,6 +107,12 @@ def patch_status(
     if (updates_pending or 0) > 0 or (security_updates_pending or 0) > 0 or reboot_required is True:
         return "action-required"
     return "compliant"
+
+
+def last_reboot_at(uptime_seconds: int | None, observed_at: datetime | None) -> datetime | None:
+    if uptime_seconds is None or uptime_seconds < 0 or observed_at is None:
+        return None
+    return observed_at - timedelta(seconds=uptime_seconds)
 
 
 def normalize_criticality(value: str | None) -> str:

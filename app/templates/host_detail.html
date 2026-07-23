@@ -58,6 +58,7 @@
       <div class="stack-row"><span>Updates pending</span><span>{{ host.updates_pending if host.updates_pending is not none else "-" }}</span></div>
       <div class="stack-row"><span>Security updates</span><span>{{ host.security_updates_pending if host.security_updates_pending is not none else "-" }}</span></div>
       <div class="stack-row"><span>Reboot required</span><span>{% if host.reboot_required is none %}-{% else %}{{ "YES" if host.reboot_required else "NO" }}{% endif %}</span></div>
+      <div class="stack-row"><span>Last reboot</span><span>{{ last_reboot_at|date_time }}</span></div>
       <div class="stack-row"><span>Last patch</span><span>{{ host.last_patch_at|date_time }}</span></div>
       <div class="stack-row"><span>Last checked</span><span>{{ host.patch_last_checked_at|date_time }}</span></div>
     </div>

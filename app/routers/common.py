@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.models import Host
 from app.services.compliance import (
     detect_os_family_version,
+    last_reboot_at,
     lifecycle_status,
     patch_status,
 )
@@ -18,7 +19,6 @@ def active_filters(
     system: str | None = None,
     os_family: str | None = None,
     q: str | None = None,
-    criticality: str | None = None,
     patch: str | None = None,
     lifecycle: str | None = None,
 ) -> dict[str, str]:
@@ -29,7 +29,6 @@ def active_filters(
         "system": system,
         "os_family": os_family,
         "q": q,
-        "criticality": criticality,
         "patch": patch,
         "lifecycle": lifecycle,
     }
@@ -46,8 +45,6 @@ def get_filter_options(db: Session) -> dict[str, list[str]]:
         "environments": distinct_values(db, Host.environment),
         "proxmox_values": distinct_values(db, Host.proxmox),
         "system_values": distinct_values(db, Host.system),
-        "criticalities": distinct_values(db, Host.criticality),
-        "owners": distinct_values(db, Host.owner),
     }
 
 
@@ -123,6 +120,10 @@ def apply_search_filter(hosts: list[Host], q: str | None) -> list[Host]:
 
 def patch_status_for_host(host: Host) -> str:
     return patch_status(host.updates_pending, host.security_updates_pending, host.reboot_required)
+
+
+def last_reboot_at_for_host(host: Host) -> datetime | None:
+    return last_reboot_at(host.uptime_seconds, host.zabbix_last_sync_at)
 
 
 def lifecycle_status_for_host(host: Host) -> str:

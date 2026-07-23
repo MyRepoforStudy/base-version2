@@ -1,9 +1,10 @@
 import unittest
-from datetime import date
+from datetime import UTC, date, datetime
 
 from app.services.compliance import (
     detect_os_family_version,
     lifecycle_status,
+    last_reboot_at,
     normalize_criticality,
     parse_date_value,
     patch_status,
@@ -50,6 +51,14 @@ class ComplianceTests(unittest.TestCase):
         self.assertEqual(patch_status(2, 0, False), "action-required")
         self.assertEqual(patch_status(0, 1, False), "action-required")
         self.assertEqual(patch_status(0, 0, True), "action-required")
+
+    def test_calculates_last_reboot_from_zabbix_observation(self):
+        observed_at = datetime(2026, 7, 23, 12, 0, tzinfo=UTC)
+        self.assertEqual(
+            last_reboot_at(36 * 3600, observed_at),
+            datetime(2026, 7, 22, 0, 0, tzinfo=UTC),
+        )
+        self.assertIsNone(last_reboot_at(None, observed_at))
 
     def test_normalizes_criticality_and_dates(self):
         self.assertEqual(normalize_criticality("P1"), "CRITICAL")
