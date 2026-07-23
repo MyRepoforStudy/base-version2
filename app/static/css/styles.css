@@ -2166,78 +2166,6 @@ body {
   background: #667085 !important;
 }
 
-.operations-kpi-grid {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin-bottom: 14px;
-}
-
-.operations-kpi-card {
-  align-items: center;
-  background: #fff;
-  border: 1px solid #dfe4ec;
-  border-radius: 10px;
-  display: flex;
-  gap: 12px;
-  min-width: 0;
-  padding: 14px;
-}
-
-.operations-kpi-icon {
-  align-items: center;
-  background: #f1f5f9;
-  border-radius: 10px;
-  display: inline-flex;
-  flex: 0 0 42px;
-  font-size: 1.2rem;
-  height: 42px;
-  justify-content: center;
-}
-
-.operations-kpi-health {
-  background: #dcfce7;
-  color: #166534;
-}
-
-.operations-kpi-disk {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.operations-kpi-performance {
-  background: #dbeafe;
-  color: #1d4ed8;
-}
-
-.operations-kpi-history {
-  background: #f3e8ff;
-  color: #7e22ce;
-}
-
-.operations-kpi-card div {
-  display: grid;
-  min-width: 0;
-}
-
-.operations-kpi-card small {
-  color: #667085;
-  font-size: 0.7rem;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-
-.operations-kpi-card strong {
-  color: #111827;
-  font-size: 1.45rem;
-  line-height: 1.2;
-}
-
-.operations-kpi-card div span {
-  color: #667085;
-  font-size: 0.72rem;
-}
-
 .health-score-value,
 .disk-capacity-value {
   color: #111827;
@@ -2350,7 +2278,6 @@ body {
   }
 
   .overview-kpis,
-  .operations-kpi-grid,
   .inventory-summary-groups,
   .overview-grid,
   .executive-grid,
@@ -2406,7 +2333,6 @@ body {
   .overview-sidebar,
   .overview-filters,
   .overview-kpis,
-  .operations-kpi-grid,
   .inventory-summary-groups,
   .overview-grid,
   .executive-grid,

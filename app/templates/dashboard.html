@@ -89,15 +89,17 @@
             <option value="unknown" {% if filters.lifecycle == "unknown" %}selected{% endif %}>Unknown</option>
           </select>
         </label>
-        <label>
-          Health
-          <select class="form-select form-select-sm" name="health">
-            <option value="">All</option>
-            <option value="healthy" {% if filters.health == "healthy" %}selected{% endif %}>Healthy</option>
-            <option value="warning" {% if filters.health == "warning" %}selected{% endif %}>Warning</option>
-            <option value="critical" {% if filters.health == "critical" %}selected{% endif %}>Critical</option>
-          </select>
-        </label>
+        {% if current_view == "performance" %}
+          <label>
+            Health
+            <select class="form-select form-select-sm" name="health">
+              <option value="">All</option>
+              <option value="healthy" {% if filters.health == "healthy" %}selected{% endif %}>Healthy</option>
+              <option value="warning" {% if filters.health == "warning" %}selected{% endif %}>Warning</option>
+              <option value="critical" {% if filters.health == "critical" %}selected{% endif %}>Critical</option>
+            </select>
+          </label>
+        {% endif %}
         <div class="overview-filter-actions">
           <button class="btn btn-primary btn-sm" type="submit">Apply</button>
           <a class="btn btn-outline-secondary btn-sm" href="/?view={{ current_view }}">Reset</a>
@@ -159,40 +161,6 @@
     {% endif %}
 
     {% if current_view == "overview" %}
-      <div class="operations-kpi-grid">
-        <section class="operations-kpi-card">
-          <span class="operations-kpi-icon operations-kpi-health"><i class="bi bi-heart-pulse"></i></span>
-          <div>
-            <small>Average Health Score</small>
-            <strong>{{ average_health_score }}/100</strong>
-            <span>{{ health_counts.get("healthy", 0) }} healthy servers</span>
-          </div>
-        </section>
-        <section class="operations-kpi-card">
-          <span class="operations-kpi-icon operations-kpi-disk"><i class="bi bi-device-hdd"></i></span>
-          <div>
-            <small>Disk Capacity</small>
-            <strong>{{ disk_pressure_count }}</strong>
-            <span>servers at or above 80%</span>
-          </div>
-        </section>
-        <section class="operations-kpi-card">
-          <span class="operations-kpi-icon operations-kpi-performance"><i class="bi bi-speedometer2"></i></span>
-          <div>
-            <small>Performance Health</small>
-            <strong>{{ performance_pressure_count }}</strong>
-            <span>CPU or RAM pressure</span>
-          </div>
-        </section>
-        <section class="operations-kpi-card">
-          <span class="operations-kpi-icon operations-kpi-history"><i class="bi bi-clock-history"></i></span>
-          <div>
-            <small>Change History</small>
-            <strong>{{ recent_change_count }}</strong>
-            <span>changes during last 7 days</span>
-          </div>
-        </section>
-      </div>
       <div class="executive-grid executive-summary-grid">
         <section class="overview-panel executive-panel executive-chart-panel">
           <div class="overview-section-heading">
@@ -340,7 +308,6 @@
                 {{ sort_th('model', 'Model') }}
                 {{ sort_th('cpu_cores', 'CPU') }}
                 {{ sort_th('ram_gb', 'RAM total') }}
-                {{ sort_th('health_score', 'Health') }}
                 {{ sort_th('os_name', 'Operating system') }}
                 {{ sort_th('os_lifecycle', 'OS lifecycle') }}
                 {{ sort_th('owner', 'Owner') }}
@@ -361,11 +328,6 @@
                   <td>{{ host.model or "-" }}</td>
                   <td>{{ host.cpu_cores or "-" }}</td>
                   <td>{{ (host.ram_gb ~ " GB") if host.ram_gb else "-" }}</td>
-                  {% set health = health_for_host(host) %}
-                  <td>
-                    <span class="badge text-bg-{{ health.status|status_class }}">{{ health.score }}/100</span>
-                    <small class="d-block text-muted mt-1">{{ health.status|title }}</small>
-                  </td>
                   <td>{{ host.os_name or "-" }}</td>
                   {% set lifecycle_status = lifecycle_status_for_host(host) %}
                   <td>
@@ -377,7 +339,7 @@
                   <td><span class="badge text-bg-{{ host.monitoring_status|status_class }}">{{ host.monitoring_status }}</span></td>
                 </tr>
               {% else %}
-                <tr><td colspan="16" class="empty-state">No servers found.</td></tr>
+                <tr><td colspan="15" class="empty-state">No servers found.</td></tr>
               {% endfor %}
             </tbody>
           </table>
