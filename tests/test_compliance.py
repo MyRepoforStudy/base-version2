@@ -3,6 +3,7 @@ from datetime import UTC, date, datetime
 
 from app.services.compliance import (
     detect_os_family_version,
+    format_uptime,
     lifecycle_status,
     last_reboot_at,
     normalize_criticality,
@@ -59,6 +60,12 @@ class ComplianceTests(unittest.TestCase):
             datetime(2026, 7, 22, 0, 0, tzinfo=UTC),
         )
         self.assertIsNone(last_reboot_at(None, observed_at))
+
+    def test_formats_uptime(self):
+        self.assertEqual(format_uptime(12 * 86400 + 4 * 3600), "12d 4h")
+        self.assertEqual(format_uptime(2 * 3600 + 15 * 60), "2h 15m")
+        self.assertEqual(format_uptime(45 * 60), "45m")
+        self.assertEqual(format_uptime(None), "-")
 
     def test_normalizes_criticality_and_dates(self):
         self.assertEqual(normalize_criticality("P1"), "CRITICAL")

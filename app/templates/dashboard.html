@@ -6,7 +6,7 @@
   {% set new_dir = 'desc' if sort == column and sort_dir == 'asc' else 'asc' %}
   <th>
     <a
-      href="/?view=hosts&environment={{ (filters.environment or '')|urlencode }}&virtual={{ (active_virtual_filter or '')|urlencode }}&os_family={{ (filters.os_family or '')|urlencode }}&proxmox={{ (filters.proxmox or '')|urlencode }}&system={{ (filters.system or '')|urlencode }}&patch={{ (filters.patch or '')|urlencode }}&lifecycle={{ (filters.lifecycle or '')|urlencode }}&q={{ (filters.q or '')|urlencode }}&sort={{ column }}&dir={{ new_dir }}"
+      href="/?view=hosts&environment={{ (filters.environment or '')|urlencode }}&virtual={{ (active_virtual_filter or '')|urlencode }}&os_family={{ (filters.os_family or '')|urlencode }}&proxmox={{ (filters.proxmox or '')|urlencode }}&system={{ (filters.system or '')|urlencode }}&lifecycle={{ (filters.lifecycle or '')|urlencode }}&q={{ (filters.q or '')|urlencode }}&sort={{ column }}&dir={{ new_dir }}"
       style="color: inherit; text-decoration: none; white-space: nowrap;"
     >
       {{ label }}
@@ -79,15 +79,6 @@
           </select>
         </label>
         <label>
-          Patch status
-          <select class="form-select form-select-sm" name="patch">
-            <option value="">All</option>
-            <option value="compliant" {% if filters.patch == "compliant" %}selected{% endif %}>Compliant</option>
-            <option value="action-required" {% if filters.patch == "action-required" %}selected{% endif %}>Action required</option>
-            <option value="unknown" {% if filters.patch == "unknown" %}selected{% endif %}>Unknown</option>
-          </select>
-        </label>
-        <label>
           OS lifecycle
           <select class="form-select form-select-sm" name="lifecycle">
             <option value="">All</option>
@@ -121,7 +112,6 @@
           <input type="hidden" name="proxmox" value="{{ filters.proxmox or '' }}">
           <input type="hidden" name="system" value="{{ filters.system or '' }}">
           <input type="hidden" name="os_family" value="{{ filters.os_family or '' }}">
-          <input type="hidden" name="patch" value="{{ filters.patch or '' }}">
           <input type="hidden" name="lifecycle" value="{{ filters.lifecycle or '' }}">
           <input type="hidden" name="q" value="{{ filters.q or '' }}">
           <input type="hidden" name="sort" value="{{ sort or '' }}">
@@ -131,7 +121,7 @@
             <i class="bi bi-arrow-repeat"></i> Refresh Zabbix
           </button>
         </form>
-        <a class="btn btn-success btn-sm" href="/exports/hosts.xlsx?environment={{ (filters.environment or '')|urlencode }}&virtual={{ (active_virtual_filter or '')|urlencode }}&proxmox={{ (filters.proxmox or '')|urlencode }}&system={{ (filters.system or '')|urlencode }}&patch={{ (filters.patch or '')|urlencode }}&lifecycle={{ (filters.lifecycle or '')|urlencode }}"><i class="bi bi-file-earmark-excel"></i> Export Servers</a>
+        <a class="btn btn-success btn-sm" href="/exports/hosts.xlsx?environment={{ (filters.environment or '')|urlencode }}&virtual={{ (active_virtual_filter or '')|urlencode }}&proxmox={{ (filters.proxmox or '')|urlencode }}&system={{ (filters.system or '')|urlencode }}&lifecycle={{ (filters.lifecycle or '')|urlencode }}"><i class="bi bi-file-earmark-excel"></i> Export Servers</a>
       </div>
     </header>
 
@@ -297,9 +287,8 @@
                 {{ sort_th('model', 'Model') }}
                 {{ sort_th('cpu_cores', 'CPU') }}
                 {{ sort_th('ram_gb', 'RAM') }}
+                {{ sort_th('uptime_seconds', 'Uptime') }}
                 {{ sort_th('os_name', 'Operating system') }}
-                {{ sort_th('patch_status', 'Patch') }}
-                {{ sort_th('updates_pending', 'Updates') }}
                 {{ sort_th('os_lifecycle', 'OS lifecycle') }}
                 {{ sort_th('owner', 'Owner') }}
                 {{ sort_th('criticality', 'Criticality') }}
@@ -319,20 +308,13 @@
                   <td>{{ host.model or "-" }}</td>
                   <td>{{ host.cpu_cores or "-" }}</td>
                   <td>{{ (host.ram_gb ~ " GB") if host.ram_gb else "-" }}</td>
-                  <td>{{ host.os_name or "-" }}</td>
-                  {% set patch_status = patch_status_for_host(host) %}
-                  {% set lifecycle_status = lifecycle_status_for_host(host) %}
                   {% set last_reboot_at = last_reboot_at_for_host(host) %}
                   <td>
-                    <span class="badge text-bg-{{ patch_status|status_class }}">{{ patch_status|replace('-', ' ')|title }}</span>
+                    <strong>{{ format_uptime(host.uptime_seconds) }}</strong>
                     <small class="d-block text-muted mt-1">Reboot: {{ last_reboot_at|date_time }}</small>
                   </td>
-                  <td>
-                    {% if host.updates_pending is not none %}
-                      {{ host.updates_pending }}
-                      {% if host.security_updates_pending %}<span class="text-danger">({{ host.security_updates_pending }} security)</span>{% endif %}
-                    {% else %}-{% endif %}
-                  </td>
+                  <td>{{ host.os_name or "-" }}</td>
+                  {% set lifecycle_status = lifecycle_status_for_host(host) %}
                   <td>
                     <span class="badge text-bg-{{ lifecycle_status|status_class }}">{{ lifecycle_status|upper }}</span>
                     {% if host.os_support_end_date %}<small class="d-block text-muted">{{ host.os_support_end_date }}</small>{% endif %}
@@ -342,7 +324,7 @@
                   <td><span class="badge text-bg-{{ host.monitoring_status|status_class }}">{{ host.monitoring_status }}</span></td>
                 </tr>
               {% else %}
-                <tr><td colspan="17" class="empty-state">No servers found.</td></tr>
+                <tr><td colspan="16" class="empty-state">No servers found.</td></tr>
               {% endfor %}
             </tbody>
           </table>

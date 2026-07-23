@@ -13,12 +13,12 @@ from app.routers.common import (
     apply_operational_filters,
     apply_os_family_filter,
     apply_search_filter,
+    format_uptime,
     get_filter_options,
-    normalized_virtual_filter,
     last_reboot_at_for_host,
     lifecycle_status_for_host,
+    normalized_virtual_filter,
     os_family_label,
-    patch_status_for_host,
     sort_hosts,
     support_status_label,
 )
@@ -38,7 +38,6 @@ def dashboard(
     system: str | None = None,
     os_family: str | None = None,
     q: str | None = None,
-    patch: str | None = None,
     lifecycle: str | None = None,
     sort: str | None = None,
     dir: str = "asc",
@@ -53,7 +52,6 @@ def dashboard(
         system=system,
         os_family=os_family,
         q=q,
-        patch=patch,
         lifecycle=lifecycle,
     )
     zabbix_refresh_error = maybe_refresh_zabbix_cache(db, force=refresh)
@@ -101,7 +99,7 @@ def dashboard(
     filtered_hosts = db.scalars(hosts_stmt).all()
     filtered_hosts = apply_os_family_filter(filtered_hosts, os_family)
     filtered_hosts = apply_search_filter(filtered_hosts, q)
-    filtered_hosts = apply_operational_filters(filtered_hosts, patch, lifecycle)
+    filtered_hosts = apply_operational_filters(filtered_hosts, lifecycle=lifecycle)
     sort_dir = "desc" if dir == "desc" else "asc"
     filtered_hosts = sort_hosts(filtered_hosts, sort, sort_dir)
 
@@ -146,7 +144,7 @@ def dashboard(
             "sort": sort,
             "sort_dir": sort_dir,
             "chart_data": chart_data,
-            "patch_status_for_host": patch_status_for_host,
+            "format_uptime": format_uptime,
             "last_reboot_at_for_host": last_reboot_at_for_host,
             "lifecycle_status_for_host": lifecycle_status_for_host,
         },

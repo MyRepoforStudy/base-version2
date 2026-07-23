@@ -6,9 +6,9 @@ from sqlalchemy.orm import Session
 from app.models import Host
 from app.services.compliance import (
     detect_os_family_version,
+    format_uptime,
     last_reboot_at,
     lifecycle_status,
-    patch_status,
 )
 
 
@@ -19,7 +19,6 @@ def active_filters(
     system: str | None = None,
     os_family: str | None = None,
     q: str | None = None,
-    patch: str | None = None,
     lifecycle: str | None = None,
 ) -> dict[str, str]:
     values = {
@@ -29,7 +28,6 @@ def active_filters(
         "system": system,
         "os_family": os_family,
         "q": q,
-        "patch": patch,
         "lifecycle": lifecycle,
     }
     return {key: value for key, value in values.items() if value}
@@ -118,10 +116,6 @@ def apply_search_filter(hosts: list[Host], q: str | None) -> list[Host]:
     return [host for host in hosts if query in haystack(host)]
 
 
-def patch_status_for_host(host: Host) -> str:
-    return patch_status(host.updates_pending, host.security_updates_pending, host.reboot_required)
-
-
 def last_reboot_at_for_host(host: Host) -> datetime | None:
     return last_reboot_at(host.uptime_seconds, host.zabbix_last_sync_at)
 
@@ -132,12 +126,9 @@ def lifecycle_status_for_host(host: Host) -> str:
 
 def apply_operational_filters(
     hosts: list[Host],
-    patch: str | None = None,
     lifecycle: str | None = None,
 ) -> list[Host]:
     selected = hosts
-    if patch:
-        selected = [host for host in selected if patch_status_for_host(host) == patch]
     if lifecycle:
         selected = [host for host in selected if lifecycle_status_for_host(host) == lifecycle]
     return selected
@@ -154,10 +145,9 @@ SORT_COLUMNS: dict[str, object] = {
     "model": lambda host: (host.model or "").lower(),
     "cpu_cores": lambda host: host.cpu_cores if host.cpu_cores is not None else -1,
     "ram_gb": lambda host: host.ram_gb if host.ram_gb is not None else -1,
+    "uptime_seconds": lambda host: host.uptime_seconds if host.uptime_seconds is not None else -1,
     "os_name": lambda host: (host.os_name or "").lower(),
     "monitoring_status": lambda host: host.monitoring_status or "",
-    "patch_status": lambda host: patch_status_for_host(host),
-    "updates_pending": lambda host: host.updates_pending if host.updates_pending is not None else -1,
     "os_lifecycle": lambda host: (
         host.os_support_end_date.toordinal() if host.os_support_end_date is not None else -1
     ),

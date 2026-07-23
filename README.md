@@ -81,23 +81,11 @@ uvicorn app.main:app --reload
 
 `hosts`: сервер + живые поля Zabbix (`zabbix_hostid`, `zabbix_host_name`, `zabbix_url`, `zabbix_agent_availability`, `monitoring_status`, `problem_count`, `zabbix_last_sync_at`, `os_name`, `cpu_cores`, `ram_gb`, `uptime_seconds`, `vendor`, `model`, `virtual`) + ручные поля поддержки и ответственности.
 
-## Patch Compliance, OS Lifecycle и ответственные
+## Uptime, OS Lifecycle и ответственные
 
-Портал читает patch-данные из любого из совместимых Zabbix item keys:
-
-- kernel: `system.kernel.version`, `kernel.version` или `system.uname`;
-- ожидающие обновления: `linux.updates.pending`, `system.updates.pending`,
-  `system.sw.updates.count`, `package.updates.pending`,
-  `apt.updates.pending` или `dnf.updates.pending`;
-- security updates: те же семейства ключей с окончанием `.security`;
-- необходимость перезагрузки: `linux.reboot.required`,
-  `system.reboot.required` или `reboot.required`;
-- последний успешный patch: `linux.patch.last`, `system.patch.last` или
-  `patch.last.success` в ISO-8601/Unix timestamp.
-
-Если patch items отсутствуют, статус намеренно отображается как `Unknown`.
-`Compliant` присваивается только при нулевых счётчиках и отсутствии требования
-перезагрузки.
+Uptime поступает из стандартного Zabbix item `system.uptime`. Портал показывает
+его длительность и вычисляет дату последней перезагрузки относительно времени
+последней синхронизации Zabbix.
 
 Ответственные читаются из Zabbix host tags:
 

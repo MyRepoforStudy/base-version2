@@ -115,6 +115,19 @@ def last_reboot_at(uptime_seconds: int | None, observed_at: datetime | None) -> 
     return observed_at - timedelta(seconds=uptime_seconds)
 
 
+def format_uptime(seconds: int | None) -> str:
+    if seconds is None or seconds < 0:
+        return "-"
+    days, remainder = divmod(seconds, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes = remainder // 60
+    if days:
+        return f"{days}d {hours}h"
+    if hours:
+        return f"{hours}h {minutes}m"
+    return f"{minutes}m"
+
+
 def normalize_criticality(value: str | None) -> str:
     normalized = (value or "").strip().lower().replace("_", "-")
     aliases = {
