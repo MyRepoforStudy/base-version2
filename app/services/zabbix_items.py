@@ -21,8 +21,18 @@ ZABBIX_CPU_UTIL_ITEM_KEYS = (
     "system.cpu.util[,idle]",
 )
 ZABBIX_MEMORY_UTIL_ITEM_KEYS = (
+    "vm.memory.utilization",
     "vm.memory.util",
     "vm.memory.size[pused]",
+)
+ZABBIX_MEMORY_AVAILABLE_PCT_ITEM_KEYS = (
+    "vm.memory.size[pavailable]",
+)
+ZABBIX_MEMORY_AVAILABLE_ITEM_KEYS = (
+    "vm.memory.size[available]",
+)
+ZABBIX_MEMORY_USED_ITEM_KEYS = (
+    "vm.memory.size[used]",
 )
 ZABBIX_LOAD_AVERAGE_ITEM_KEYS = (
     "system.cpu.load[all,avg1]",
@@ -93,6 +103,9 @@ ZABBIX_DETAIL_ITEM_KEYS = (
     *ZABBIX_OS_ITEM_KEYS,
     *ZABBIX_CPU_UTIL_ITEM_KEYS,
     *ZABBIX_MEMORY_UTIL_ITEM_KEYS,
+    *ZABBIX_MEMORY_AVAILABLE_PCT_ITEM_KEYS,
+    *ZABBIX_MEMORY_AVAILABLE_ITEM_KEYS,
+    *ZABBIX_MEMORY_USED_ITEM_KEYS,
     *ZABBIX_LOAD_AVERAGE_ITEM_KEYS,
     *ZABBIX_ROOT_DISK_TOTAL_ITEM_KEYS,
     *ZABBIX_ROOT_DISK_USED_ITEM_KEYS,
@@ -256,6 +269,32 @@ def performance_inventory_from_items(item_values: dict[str, str]) -> dict[str, f
         minimum=0,
         maximum=100,
     )
+    if memory_value is None:
+        memory_available_pct = float_from_items(
+            item_values,
+            ZABBIX_MEMORY_AVAILABLE_PCT_ITEM_KEYS,
+            minimum=0,
+            maximum=100,
+        )
+        if memory_available_pct is not None:
+            memory_value = 100 - memory_available_pct
+    if memory_value is None:
+        memory_total = float_from_items(item_values, (ZABBIX_MEM_TOTAL_ITEM_KEY,), minimum=0)
+        memory_available = float_from_items(
+            item_values,
+            ZABBIX_MEMORY_AVAILABLE_ITEM_KEYS,
+            minimum=0,
+        )
+        memory_used = float_from_items(
+            item_values,
+            ZABBIX_MEMORY_USED_ITEM_KEYS,
+            minimum=0,
+        )
+        if memory_total:
+            if memory_available is not None:
+                memory_value = min(100, max(0, 100 - memory_available / memory_total * 100))
+            elif memory_used is not None:
+                memory_value = min(100, memory_used / memory_total * 100)
     load_average = float_from_items(item_values, ZABBIX_LOAD_AVERAGE_ITEM_KEYS, minimum=0)
     filesystems = filesystem_inventory_from_items(item_values)
     root_filesystem = next(

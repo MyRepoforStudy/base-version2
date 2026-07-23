@@ -93,7 +93,8 @@ Uptime поступает из стандартного Zabbix item `system.upti
 Портал читает актуальные метрики из стандартных Zabbix items:
 
 - CPU: `system.cpu.util` или `system.cpu.util[,idle]`;
-- RAM: `vm.memory.util` или `vm.memory.size[pused]`;
+- RAM: `vm.memory.utilization`, `vm.memory.size[pavailable]`,
+  `vm.memory.size[pused]` или расчёт из `total + available`;
 - load average: `system.cpu.load[all,avg1]`;
 - файловые системы: семейство `vfs.fs.size[<mount>,total|used|pused]`
   (также поддерживаются dependent-item варианты). В списке серверов показывается

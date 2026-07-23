@@ -42,7 +42,7 @@ class ZabbixItemTests(unittest.TestCase):
     def test_extracts_performance_and_root_disk_metrics(self):
         values = {
             "system.cpu.util[,idle]": "82.5",
-            "vm.memory.size[pused]": "71.25",
+            "vm.memory.utilization": "71.25",
             "system.cpu.load[all,avg1]": "1.82",
             "vfs.fs.size[/,total]": str(100 * 1024**3),
             "vfs.fs.size[/,used]": str(84 * 1024**3),
@@ -60,6 +60,20 @@ class ZabbixItemTests(unittest.TestCase):
         filesystems = filesystem_inventory_from_items(values)
         self.assertEqual([filesystem["mount_point"] for filesystem in filesystems], ["/", "/var"])
         self.assertEqual(filesystems[1]["used_pct"], 94.0)
+
+    def test_calculates_memory_utilization_from_available_metrics(self):
+        from_percentage = performance_inventory_from_items(
+            {"vm.memory.size[pavailable]": "24.5"}
+        )
+        self.assertEqual(from_percentage["memory_utilization_pct"], 75.5)
+
+        from_bytes = performance_inventory_from_items(
+            {
+                "vm.memory.size[total]": str(16 * 1024**3),
+                "vm.memory.size[available]": str(4 * 1024**3),
+            }
+        )
+        self.assertEqual(from_bytes["memory_utilization_pct"], 75.0)
 
 
 if __name__ == "__main__":
